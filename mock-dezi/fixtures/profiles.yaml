@@ -1,0 +1,126 @@
+# PROVISIONAL SYNTHETIC FIXTURES of the mock DEZI provider (design §16, §18).
+#
+# Every person, DEZI number, subscriber, role and statement ID below is invented for local testing. None comes from
+# DEZI's register or DEZI's test set, and none is a confirmed message from the CIBG. The shapes follow the design's
+# description of specification v0.7 and the test set of 14 July 2026:
+# - DEZI and subscriber numbers are digit strings; their real format is open (design §4, §10);
+# - role codes appear as `01.000` (v0.7), `1.015` (test set) and `00.000`; all are strings, never numbers (§16);
+# - a profile without a role omits `rol_code`, `rol_naam` and `rol_code_bron`; DEZI's representation is open (§16);
+# - `voorvoegsel: ~` is sent as JSON null, as in the v0.7 example (§16);
+# - `rol_code_bron` values are mock placeholders.
+# `status` is the statement's register status at the status endpoint: active, revoked or other_status.
+#
+# Organisation accounts (Mujina) that should MATCH carry the person's dezi_nummer in
+# urn:mace:govroam.nl:attribute-def:organisation-dezi-nummer. `frank` exists for the DIFFERENT-identity case:
+# no organisation account carries his number.
+persons:
+  anna:
+    description: 'One profile with role 01.000 (the match case)'
+    dezi_nummer: '900000001'
+    voorletters: 'A.'
+    voorvoegsel: ~
+    achternaam: 'Mockarts'
+    profiles:
+      - id: anna-ggd-noord
+        label: 'Mock GGD Noord, arts'
+        verklaring_id: 'd3e2a1c0-0001-4000-8000-000000000001'
+        abonnee_nummer: '90000001'
+        abonnee_naam: 'Mock GGD Noord'
+        rol_code: '01.000'
+        rol_naam: 'Arts'
+        rol_code_bron: 'mock-bron'
+        status: active
+
+  bram:
+    description: 'Two profiles: DEZI asks which one to use (profile selection)'
+    dezi_nummer: '900000002'
+    voorletters: 'B.'
+    voorvoegsel: 'van der'
+    achternaam: 'Mockverpleger'
+    profiles:
+      - id: bram-ggd-noord
+        label: 'Mock GGD Noord, role code in test-set format'
+        verklaring_id: 'd3e2a1c0-0002-4000-8000-000000000001'
+        abonnee_nummer: '90000001'
+        abonnee_naam: 'Mock GGD Noord'
+        rol_code: '1.015'
+        rol_naam: 'Verpleegkundige'
+        rol_code_bron: 'mock-bron'
+        status: active
+      - id: bram-ggd-zuid
+        label: 'Mock GGD Zuid, arts'
+        verklaring_id: 'd3e2a1c0-0002-4000-8000-000000000002'
+        abonnee_nummer: '90000002'
+        abonnee_naam: 'Mock GGD Zuid'
+        rol_code: '01.000'
+        rol_naam: 'Arts'
+        rol_code_bron: 'mock-bron'
+        status: active
+
+  carla:
+    description: 'One profile without a role code'
+    dezi_nummer: '900000003'
+    voorletters: 'C.'
+    voorvoegsel: ~
+    achternaam: 'Mockzonderrol'
+    profiles:
+      - id: carla-ggd-noord
+        label: 'Mock GGD Noord, no role'
+        verklaring_id: 'd3e2a1c0-0003-4000-8000-000000000001'
+        abonnee_nummer: '90000001'
+        abonnee_naam: 'Mock GGD Noord'
+        rol_code: ~
+        rol_naam: ~
+        rol_code_bron: ~
+        status: active
+
+  dirk:
+    description: 'One profile with role code 00.000, released unchanged'
+    dezi_nummer: '900000004'
+    voorletters: 'D.'
+    voorvoegsel: ~
+    achternaam: 'Mocknulrol'
+    profiles:
+      - id: dirk-ggd-noord
+        label: 'Mock GGD Noord, role 00.000'
+        verklaring_id: 'd3e2a1c0-0004-4000-8000-000000000001'
+        abonnee_nummer: '90000001'
+        abonnee_naam: 'Mock GGD Noord'
+        rol_code: '00.000'
+        rol_naam: 'Mock rol 00.000'
+        rol_code_bron: 'mock-bron'
+        status: active
+
+  eva:
+    description: 'One profile whose statement is revoked in the register'
+    dezi_nummer: '900000005'
+    voorletters: 'E.'
+    voorvoegsel: ~
+    achternaam: 'Mockingetrokken'
+    profiles:
+      - id: eva-ggd-noord
+        label: 'Mock GGD Noord, revoked statement'
+        verklaring_id: 'd3e2a1c0-0005-4000-8000-000000000001'
+        abonnee_nummer: '90000001'
+        abonnee_naam: 'Mock GGD Noord'
+        rol_code: '01.000'
+        rol_naam: 'Arts'
+        rol_code_bron: 'mock-bron'
+        status: revoked
+
+  frank:
+    description: 'A different identity: no organisation account carries this number (binding mismatch)'
+    dezi_nummer: '900000006'
+    voorletters: 'F.'
+    voorvoegsel: ~
+    achternaam: 'Mockander'
+    profiles:
+      - id: frank-ggd-noord
+        label: 'Mock GGD Noord, arts'
+        verklaring_id: 'd3e2a1c0-0006-4000-8000-000000000001'
+        abonnee_nummer: '90000001'
+        abonnee_naam: 'Mock GGD Noord'
+        rol_code: '01.000'
+        rol_naam: 'Arts'
+        rol_code_bron: 'mock-bron'
+        status: active

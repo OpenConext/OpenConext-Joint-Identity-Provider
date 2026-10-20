@@ -1,0 +1,20 @@
+###> symfony/framework-bundle ###
+/.env.local
+/.env.local.php
+/.env.*.local
+/public/bundles/
+/var/
+/vendor/
+###< symfony/framework-bundle ###
+
+###> phpunit/phpunit ###
+/phpunit.xml
+/.phpunit.cache/
+###< phpunit/phpunit ###
+
+/.phpcs.cache
+
+# The mock's private signing keys never enter version control (see README "Initialization").
+/keys/
+*.pem
+*.key
