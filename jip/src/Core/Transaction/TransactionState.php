@@ -16,4 +16,26 @@ enum TransactionState: string
     case Validating = 'validating';
     case Succeeded = 'succeeded';
     case Consumed = 'consumed';
+
+    /**
+     * The states `/authz` may open a transaction in.
+     */
+    public function isInitial(): bool
+    {
+        return in_array($this, [self::Pending, self::Skipped, self::Failed], true);
+    }
+
+    /**
+     * The transitions of the state diagram in design §13. Failed and consumed are final.
+     */
+    public function canMoveTo(self $next): bool
+    {
+        return in_array($next, match ($this) {
+            self::Pending => [self::AtProvider],
+            self::AtProvider => [self::Validating],
+            self::Validating => [self::Succeeded, self::Failed],
+            self::Succeeded, self::Skipped => [self::Consumed, self::Failed],
+            self::Failed, self::Consumed => [],
+        }, true);
+    }
 }

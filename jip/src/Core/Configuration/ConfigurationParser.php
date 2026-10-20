@@ -65,7 +65,7 @@ final readonly class ConfigurationParser
 
         $attributes = $this->parseAttributes($root->get('attributes'), $profile);
         $binding = $this->parseBinding($root->get('binding'), $attributes, $profile);
-        $transactions = $this->parseTransactions($root->get('transactions'));
+        $transactions = $this->parseTransactions($root->get('transactions'), $environment);
         $services = $this->parseServices(
             $root->get('services'),
             array_keys($providerNode->get('clients')->entries()),
@@ -395,7 +395,7 @@ final readonly class ConfigurationParser
         return $attribute === null || $claim === null ? null : new BindingConfiguration($attribute, $claim);
     }
 
-    private function parseTransactions(ConfigNode $node): ?TransactionConfiguration
+    private function parseTransactions(ConfigNode $node, ?Environment $environment): ?TransactionConfiguration
     {
         if (!$node->requireMap()) {
             return null;
@@ -403,7 +403,21 @@ final readonly class ConfigurationParser
         $node->allowOnly('lifetime_seconds', 'store');
 
         $lifetime = $node->get('lifetime_seconds')->requirePositiveInt();
-        $store = $node->get('store')->requireString();
+        $storeNode = $node->get('store');
+        $store = $storeNode->requireString();
+        if (
+            $store !== null
+            && (!str_starts_with($store, TransactionConfiguration::SQLITE_PREFIX)
+                || trim(substr($store, strlen(TransactionConfiguration::SQLITE_PREFIX))) === '')
+        ) {
+            $storeNode->error('must be sqlite: followed by a database path (the single-node store)');
+            $store = null;
+        }
+
+        if ($store !== null && $environment !== null && $environment !== Environment::Mock) {
+            $storeNode->error('must be a shared store outside the mock environment');
+            $store = null;
+        }
 
         return $lifetime === null || $store === null ? null : new TransactionConfiguration($lifetime, $store);
     }

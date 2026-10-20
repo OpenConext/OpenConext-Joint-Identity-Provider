@@ -50,7 +50,8 @@ final readonly class Transaction
 
     /**
      * Store implementations must run this against the current record inside the atomic replacement.
-     * A result deadline may be assigned once, then only shortened; the start deadline never changes.
+     * Only the transitions of design §13 are allowed. A result deadline may be assigned once, then only
+     * shortened; the start deadline never changes.
      */
     public function assertCanBeReplacedBy(self $replacement): void
     {
@@ -64,6 +65,14 @@ final readonly class Transaction
             || $replacement->transactionDeadline->format('U.u') !== $this->transactionDeadline->format('U.u')
         ) {
             throw new InvalidArgumentException('A transaction replacement must preserve its start fields.');
+        }
+
+        if (!$this->state->canMoveTo($replacement->state)) {
+            throw new InvalidArgumentException(sprintf(
+                'A transaction cannot move from %s to %s.',
+                $this->state->value,
+                $replacement->state->value,
+            ));
         }
 
         if (

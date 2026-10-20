@@ -158,6 +158,12 @@ final class ConfigurationLoaderTest extends TestCase
                 self::assertNull($c->provider->oidc->authorization->maxAge);
             },
         ];
+        yield 'a relative sqlite store path' => [
+            [[['transactions', 'store'], 'sqlite:var/jip/transactions.sqlite']],
+            static function (JipConfiguration $c): void {
+                self::assertSame('var/jip/transactions.sqlite', $c->transactions->sqlitePath());
+            },
+        ];
     }
 
     /**
@@ -185,6 +191,16 @@ final class ConfigurationLoaderTest extends TestCase
             ['transactions', 'store'],
             '<shared store with atomic operations>',
             'transactions.store: is an unreplaced placeholder',
+        ];
+        yield 'a store that is not sqlite' => [
+            ['transactions', 'store'],
+            'single-node',
+            'transactions.store: must be sqlite: followed by a database path (the single-node store)',
+        ];
+        yield 'a sqlite store without a path' => [
+            ['transactions', 'store'],
+            'sqlite: ',
+            'transactions.store: must be sqlite: followed by a database path (the single-node store)',
         ];
         yield 'placeholder inside a value' => [
             ['provider', 'issuer'],
@@ -554,6 +570,26 @@ final class ConfigurationLoaderTest extends TestCase
         }
 
         yield 'unknown top-level setting' => [['provder'], [], 'provder: is not a known setting'];
+    }
+
+    /**
+     * @return iterable<string, array{Environment}>
+     */
+    public static function sharedStoreEnvironments(): iterable
+    {
+        yield 'acceptance' => [Environment::Acceptance];
+        yield 'production' => [Environment::Production];
+    }
+
+    #[DataProvider('sharedStoreEnvironments')]
+    public function test_sqlite_is_refused_outside_mock(Environment $environment): void
+    {
+        $configuration = Fixture::with($this->fixture->mockConfiguration(), ['environment'], $environment->value);
+        $file = $this->fixture->writeConfiguration($configuration);
+
+        $errors = self::errorsOf(static fn () => Fixture::loader($file, $environment->value)->load());
+
+        self::assertSame(['transactions.store: must be a shared store outside the mock environment'], $errors);
     }
 
     public function test_environment_must_equal_connector_environment(): void

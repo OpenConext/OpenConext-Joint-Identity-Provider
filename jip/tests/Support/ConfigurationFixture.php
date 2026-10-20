@@ -69,7 +69,15 @@ final class ConfigurationFixture
             'keys/mock/ggd-decryption.pem' => $this->directory . '/decryption.pem',
         ]);
 
+        /** @var array<string, mixed> $configuration */
+        $configuration = self::with($configuration, ['transactions', 'store'], 'sqlite:' . $this->storePath());
+
         return $configuration;
+    }
+
+    public function storePath(): string
+    {
+        return $this->directory . '/transactions.sqlite';
     }
 
     /**
