@@ -1,0 +1,5 @@
+/upstream/
+/.env
+/haproxy/generated/
+/certs/
+/libcheck/vendor/

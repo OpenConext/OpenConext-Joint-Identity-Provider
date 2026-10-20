@@ -1,0 +1,88 @@
+# JointIdentityProvider (JIP) POC overlay for OpenConext-devconf core.
+# Applied after devconf's core/docker-compose.yml and core/engine/docker-compose.override.yml
+# by devenv/bin/compose.sh, which exports the variables below from devenv/.env.
+# Relative paths would resolve against devconf's core/ directory, so every local path is absolute.
+services:
+  haproxy:
+    volumes:
+      - ${JIP_DEVENV_DIR}/haproxy/generated/backends.map:/usr/local/etc/haproxy/backends.map:ro
+      - ${JIP_DEVENV_DIR}/haproxy/generated/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks:
+      coreconextdev:
+        aliases:
+          - jip.dev.openconext.local
+          - mock-dezi.dev.openconext.local
+          - jip-test-sp.dev.openconext.local
+
+  # Host port 3306 is taken on this machine; EngineBlock reaches MariaDB over the compose network.
+  mariadb:
+    ports: !override
+      - 127.0.0.1:${DEVCONF_MARIADB_HOST_PORT:-13306}:3306
+
+  engine:
+    environment:
+      - JIP_SBS_API_TOKEN=${JIP_SBS_API_TOKEN:?run devenv/bin/setup.sh first}
+
+  # Manage 9.1.0 is the first release with coin:collab_enabled (design §10); pinned explicitly.
+  managegui:
+    image: ghcr.io/openconext/openconext-manage/manage-gui:${MANAGE_VERSION:-9.7.2}
+  manageserver:
+    image: ghcr.io/openconext/openconext-manage/manage-server:${MANAGE_VERSION:-9.7.2}
+
+  # The three POC applications use EngineBlock's development base image. Their code is created in
+  # later steps; the base entrypoint imports /config/haproxy/haproxy.crt into the system trust store.
+  jip:
+    image: ghcr.io/openconext/openconext-basecontainers/${JIP_PHP_IMAGE:-php85-apache2-node24:latest}
+    profiles: ["jip"]
+    # Startup gate: Apache starts only after jip:config:validate passes as the web-server user.
+    entrypoint: ["/usr/local/bin/jip-entrypoint"]
+    command: ["apache2-foreground"]
+    volumes:
+      - ${JIP_CODE_PATH}:/var/www/html
+      - ${JIP_DEVENV_DIR}/jip/entrypoint.sh:/usr/local/bin/jip-entrypoint:ro
+      - ${JIP_DEVENV_DIR}/jip/appconf.conf:/etc/apache2/sites-enabled/appconf.conf:ro
+      - ${DEVCONF_CORE_DIR}/haproxy/haproxy.crt:/config/haproxy/haproxy.crt:ro
+    environment:
+      - APP_ENV=${JIP_APP_ENV:-dev}
+      - APP_DEBUG=${JIP_APP_DEBUG:-true}
+      - JIP_CONFIG_FILE=config/jip/mock.yaml
+      # Variable names fixed by the design (§17).
+      - CONNECTOR_ENVIRONMENT=mock
+      - EB_API_TOKEN=${JIP_SBS_API_TOKEN:?run devenv/bin/setup.sh first}
+    # Readiness only; JIP itself refuses requests while the configuration is invalid.
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "-s", "http://localhost/health"]
+      start_period: 30s
+      start_interval: 1s
+      interval: 10s
+      timeout: 2s
+      retries: 20
+    networks:
+      coreconextdev:
+    hostname: jip.docker
+
+  mock-dezi:
+    image: ghcr.io/openconext/openconext-basecontainers/${JIP_PHP_IMAGE:-php85-apache2-node24:latest}
+    profiles: ["jip"]
+    volumes:
+      - ${MOCK_DEZI_CODE_PATH}:/var/www/html
+      - ${DEVCONF_CORE_DIR}/haproxy/haproxy.crt:/config/haproxy/haproxy.crt:ro
+    environment:
+      - APP_ENV=${JIP_APP_ENV:-dev}
+      - APP_DEBUG=${JIP_APP_DEBUG:-true}
+    networks:
+      coreconextdev:
+    hostname: mock-dezi.docker
+
+  jip-test-sp:
+    image: ghcr.io/openconext/openconext-basecontainers/${JIP_PHP_IMAGE:-php85-apache2-node24:latest}
+    profiles: ["jip"]
+    volumes:
+      - ${JIP_TEST_SP_CODE_PATH}:/var/www/html
+      - ${DEVCONF_CORE_DIR}/haproxy/haproxy.crt:/config/haproxy/haproxy.crt:ro
+    environment:
+      - APP_ENV=${JIP_APP_ENV:-dev}
+      - APP_DEBUG=${JIP_APP_DEBUG:-true}
+    networks:
+      coreconextdev:
+    hostname: jip-test-sp.docker
