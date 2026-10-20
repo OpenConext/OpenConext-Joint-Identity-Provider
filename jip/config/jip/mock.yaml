@@ -1,0 +1,77 @@
+# JointIdentityProvider (JIP) configuration for the local mock DEZI (design §11, §17).
+#
+# MOCK ONLY. Values marked "mock assumption" are choices for mock-dezi.dev.openconext.local, not
+# confirmed DEZI values; they never move into an acceptance or production configuration (design §16, §17).
+# Switching to DEZI acceptance changes the `provider` block and `environment` only.
+#
+# Keys: run bin/init-mock-keys first. Secrets come from the environment, never from this file.
+environment: mock
+engineblock:
+  api_token: '%env(EB_API_TOKEN)%'
+  call_timeout_seconds: 10            # devenv/engine/zz_jip_sbs.yaml sets EngineBlock's http_client.timeout to 10
+  return_url_prefix: 'https://engine.dev.openconext.local/authentication/idp/process-sraminterrupt'
+provider:
+  profile: dezi
+  issuer: 'https://mock-dezi.dev.openconext.local'
+  authorization:
+    scope: openid
+    prompt: login
+    max_age: 0                        # mock assumption: the mock supports max_age; DEZI support is open (§10)
+  approved_key_addresses:
+    id_token: 'https://mock-dezi.dev.openconext.local/openid/connect/jwks.json'
+    envelope: 'https://mock-dezi.dev.openconext.local/envelope/jwks.json'   # mock assumption: own address; DEZI's is open (§10, §16)
+    statement: 'https://mock-dezi.dev.openconext.local/dezi/jwks.json'
+  expected_issuers:
+    id_token: 'https://mock-dezi.dev.openconext.local'
+    envelope: 'auth.mock-dezi.dev.openconext.local'       # mock assumption, shaped like v0.7's auth.dezi.nl
+    statement: 'abonnee.mock-dezi.dev.openconext.local'   # mock assumption, shaped like v0.7's abonnee.dezi.nl
+  expected_assurance:                 # mock assumption: the v0.7 example values; DEZI's are open (§10, §16)
+    loa_authn: 'http://eidas.europa.eu/LoA/high'
+    loa_dezi: 'http://eidas.europe.eu/LoA/high'
+  clock_skew_seconds: 60
+  key_cache_seconds: 3600
+  key_refetch_min_interval_seconds: 60
+  certificate_expiry_warning_days: 60
+  revocation:
+    mode: status_check
+    status_address: 'https://mock-dezi.dev.openconext.local/status/v1/verklaring/{verklaring_id}'
+    timeout_seconds: 5
+    decision_validity_seconds: 60
+  clients:
+    ggd:
+      client_id: 'jip-mock-ggd'       # mock assumption: the mock's client registration
+      authentication: private_key_jwt
+      signing_key:
+        certificate: 'keys/mock/ggd-signing.crt'
+        private_key: 'keys/mock/ggd-signing.pem'
+        assertion_lifetime_seconds: 60
+      decryption_keys:
+        - certificate: 'keys/mock/ggd-decryption.crt'
+          private_key: 'keys/mock/ggd-decryption.pem'
+attributes:
+  # Placeholder names until govroam agrees them (design §6, §10); they match devenv/engine/zz_jip_sbs.yaml.
+  reserved_prefix: 'urn:mace:govroam.nl:attribute-def:dezi:'
+  login_flag: 'urn:mace:govroam.nl:attribute-def:dezi:login'
+  claims:
+    dezi_nummer:    { attribute: 'urn:mace:govroam.nl:attribute-def:dezi:dezi-nummer', required: true, default_release: true }
+    abonnee_nummer: { attribute: 'urn:mace:govroam.nl:attribute-def:dezi:abonnee-nummer', required: true, default_release: true }
+    rol_code:       { attribute: 'urn:mace:govroam.nl:attribute-def:dezi:rol-code', required: false, default_release: true }
+    rol_naam:       { attribute: 'urn:mace:govroam.nl:attribute-def:dezi:rol-naam', required: false, default_release: false }
+    abonnee_naam:   { attribute: 'urn:mace:govroam.nl:attribute-def:dezi:abonnee-naam', required: false, default_release: false }
+    voorletters:    { attribute: 'urn:mace:govroam.nl:attribute-def:dezi:voorletters', required: false, default_release: false }
+    voorvoegsel:    { attribute: 'urn:mace:govroam.nl:attribute-def:dezi:voorvoegsel', required: false, default_release: false }
+    achternaam:     { attribute: 'urn:mace:govroam.nl:attribute-def:dezi:achternaam', required: false, default_release: false }
+binding:
+  organisation_attribute: 'urn:mace:govroam.nl:attribute-def:organisation-dezi-nummer'
+  claim: dezi_nummer
+transactions:
+  lifetime_seconds: 600
+  store: 'single-node'                # the proof of concept runs on one node (design §13)
+services:
+  # mock assumption: the entity ID of the local test SP (jip-test-sp.dev.openconext.local).
+  'https://jip-test-sp.dev.openconext.local/saml/metadata':
+    client: ggd
+    connection_policy_version: 'mock-1'
+    allowed_organisations: ['http://mock-idp']       # devconf's Mujina IdP; http://mock-idp2 stays refused
+    release: [dezi_nummer, abonnee_nummer, rol_code]
+    restart_login_url: 'https://jip-test-sp.dev.openconext.local/'

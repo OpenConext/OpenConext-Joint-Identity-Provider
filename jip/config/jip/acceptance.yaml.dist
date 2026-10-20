@@ -1,0 +1,79 @@
+# JointIdentityProvider (JIP) configuration template for DEZI acceptance (design §17).
+#
+# Every <...> value must be replaced with an approved value; JIP refuses to start while one remains.
+# Copy this file outside the repository (for example /etc/jip/jip.yaml), point JIP_CONFIG_FILE at it and
+# set CONNECTOR_ENVIRONMENT=acceptance. Mock values never belong here.
+#
+# The DEZI placeholders stay until the CIBG gives a dated confirmation (design §10) of: the key address
+# per message type, the expected issuers, loa_authn and loa_dezi, the client ID, the client-authentication
+# method, the signing-key registration, max_age support and whether auth_time is always returned.
+environment: acceptance
+engineblock:
+  api_token: '%env(EB_API_TOKEN)%'
+  call_timeout_seconds: 10            # EngineBlock's http_client.timeout on every EngineBlock node (§17 check 20)
+  return_url_prefix: 'https://engine.govconext.example/authentication/idp/process-sraminterrupt'
+provider:
+  profile: dezi
+  issuer: 'https://acceptatie.auth.dezi.nl'
+  authorization:
+    scope: openid
+    prompt: login
+    # max_age: 0                      # only after the CIBG confirms max_age support and auth_time (§10, §14)
+  approved_key_addresses:
+    id_token: 'https://acceptatie.auth.dezi.nl/openid/connect/jwks.json'
+    envelope: '<CIBG-confirmed key address>'
+    statement: 'https://acceptatie.auth.dezi.nl/dezi/jwks.json'
+  expected_issuers:
+    id_token: 'https://acceptatie.auth.dezi.nl'   # the discovery issuer, unless the CIBG confirms another value (§14)
+    envelope: '<confirmed>'
+    statement: '<confirmed>'
+  expected_assurance:
+    loa_authn: '<confirmed>'
+    loa_dezi: '<confirmed>'
+  clock_skew_seconds: 60
+  key_cache_seconds: 3600
+  key_refetch_min_interval_seconds: 60
+  certificate_expiry_warning_days: 60
+  revocation:
+    mode: status_check
+    status_address: 'https://acceptatie.auth.dezi.nl/status/v1/verklaring/{verklaring_id}'
+    timeout_seconds: 5
+    decision_validity_seconds: 60
+  clients:
+    ggd:
+      client_id: '<from DEZI registration>'
+      authentication: private_key_jwt # or none, only when the CIBG confirms DEZI wants no client authentication (§14)
+      signing_key:
+        certificate: '/etc/jip/keys/ggd-signing-2026.crt'
+        private_key: '/etc/jip/keys/ggd-signing-2026.pem'
+        # kid: '<as the CIBG confirms>'
+        assertion_lifetime_seconds: 60
+      decryption_keys:                # newest first; every entry decrypts (§14)
+        - certificate: '/etc/jip/keys/ggd-2026.crt'
+          private_key: '/etc/jip/keys/ggd-2026.pem'
+          # kid: '<as the CIBG confirms>'
+attributes:
+  reserved_prefix: 'urn:mace:govroam.nl:attribute-def:dezi:'
+  login_flag: 'urn:mace:govroam.nl:attribute-def:dezi:login'
+  claims:
+    dezi_nummer:    { attribute: 'urn:mace:govroam.nl:attribute-def:dezi:dezi-nummer', required: true, default_release: true }
+    abonnee_nummer: { attribute: 'urn:mace:govroam.nl:attribute-def:dezi:abonnee-nummer', required: true, default_release: true }
+    rol_code:       { attribute: 'urn:mace:govroam.nl:attribute-def:dezi:rol-code', required: false, default_release: true }
+    rol_naam:       { attribute: 'urn:mace:govroam.nl:attribute-def:dezi:rol-naam', required: false, default_release: false }
+    abonnee_naam:   { attribute: 'urn:mace:govroam.nl:attribute-def:dezi:abonnee-naam', required: false, default_release: false }
+    voorletters:    { attribute: 'urn:mace:govroam.nl:attribute-def:dezi:voorletters', required: false, default_release: false }
+    voorvoegsel:    { attribute: 'urn:mace:govroam.nl:attribute-def:dezi:voorvoegsel', required: false, default_release: false }
+    achternaam:     { attribute: 'urn:mace:govroam.nl:attribute-def:dezi:achternaam', required: false, default_release: false }
+binding:
+  organisation_attribute: 'urn:mace:govroam.nl:attribute-def:organisation-dezi-nummer'
+  claim: dezi_nummer
+transactions:
+  lifetime_seconds: 600
+  store: '<shared store with atomic operations>'
+services:
+  'https://app.ggd.example.nl/saml/metadata':
+    client: ggd
+    connection_policy_version: '<approved version>'
+    allowed_organisations: ['https://idp.ggd.example.nl/saml/metadata']
+    release: [dezi_nummer, abonnee_nummer, rol_code]
+    restart_login_url: '<approved by the application owner>'
