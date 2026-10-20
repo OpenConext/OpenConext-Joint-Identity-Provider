@@ -1,0 +1,13 @@
+# JIP keeps no session: every call is authenticated by the API token or by its transaction (design §13).
+framework:
+    # JIP signs nothing with the kernel secret; it is only defined so that framework services compile.
+    secret: '%env(default::APP_SECRET)%'
+    session: false
+    http_method_override: false
+    handle_all_throwables: true
+    php_errors:
+        log: true
+
+when@test:
+    framework:
+        test: true

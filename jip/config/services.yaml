@@ -1,0 +1,15 @@
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    JointIdentityProvider\:
+        resource: '../src/'
+        exclude:
+            - '../src/Kernel.php'
+            - '../src/Core/Transaction/'
+
+when@test:
+    services:
+        logger:
+            class: Psr\Log\NullLogger
