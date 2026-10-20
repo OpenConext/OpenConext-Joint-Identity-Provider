@@ -1,0 +1,17 @@
+{
+    "name": "jip/libcheck",
+    "description": "Executable verification of the JOSE/OIDC library choice for the JointIdentityProvider (JIP) (design §14, §19). Not part of JIP.",
+    "type": "project",
+    "license": "Apache-2.0",
+    "require": {
+        "php": "^8.5",
+        "ext-openssl": "*",
+        "ext-gmp": "*",
+        "web-token/jwt-library": "^4.2",
+        "symfony/http-client": "^7.4",
+        "symfony/clock": "^7.4"
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
