@@ -102,6 +102,35 @@ else
     miss "JIP var/: run devenv/bin/setup.sh"
 fi
 
+section "Mock DEZI provider (host PHP; read-only check, state kept)"
+mock_keys="${MOCK_DEZI_CODE_PATH}/keys"
+if [[ ! -f "${MOCK_DEZI_CODE_PATH}/vendor/autoload_runtime.php" ]]; then
+    miss "mock DEZI vendor/: run 'composer install' in ${MOCK_DEZI_CODE_PATH}"
+elif ! command -v php >/dev/null; then
+    miss "host PHP 8.5 (needed to check the mock DEZI provider on the host)"
+elif [[ ! -f "$mock_keys/rogue.pem" ]]; then
+    miss "mock DEZI keys: run devenv/bin/setup.sh (or ${MOCK_DEZI_CODE_PATH}/bin/init-keys)"
+else
+    out=$(cd "${MOCK_DEZI_CODE_PATH}" && APP_ENV=dev APP_DEBUG=0 php bin/console mock-dezi:reset --check --no-ansi 2>&1)
+    [[ $? -eq 0 ]] && ok "mock DEZI configuration, fixtures, client certificates and keys are usable" \
+        || bad "mock DEZI check fails: $(tail -1 <<<"$out")"
+    git -C "${JIP_ROOT}" check-ignore -q "$mock_keys/rogue.pem" \
+        && ok "mock DEZI keys/ is git-ignored" || bad "mock DEZI keys/ is not git-ignored"
+    keys_acl=1
+    acl_entry "$mock_keys" "user:${JIP_CONTAINER_WEB_UID}:--x" || keys_acl=0
+    for f in "$mock_keys"/*.pem; do
+        acl_entry "$f" "user:${JIP_CONTAINER_WEB_UID}:r--" || keys_acl=0
+    done
+    [[ $keys_acl -eq 1 ]] \
+        && ok "mock DEZI keys/: search and read for the web-server user only" \
+        || bad "mock DEZI keys/: ACL for uid ${JIP_CONTAINER_WEB_UID} missing (run devenv/bin/setup.sh)"
+    [[ -z "$(find "$mock_keys" -name '*.pem' -perm /o=rwx)" ]] && ok "no mock DEZI private key is world-accessible" \
+        || bad "a mock DEZI private key is world-accessible"
+    getfacl -cn "${MOCK_DEZI_CODE_PATH}/var" 2>/dev/null | grep -qx "default:user:${JIP_CONTAINER_WEB_UID}:rwx" \
+        && ok "mock DEZI var/: read-write for the web-server user, inherited by new entries" \
+        || bad "mock DEZI var/: ACL for uid ${JIP_CONTAINER_WEB_UID} missing (run devenv/bin/setup.sh)"
+fi
+
 section "Local configuration"
 [[ -f "${JIP_DEVENV_DIR}/.env" ]] && ok "devenv/.env" || miss "devenv/.env: run devenv/bin/setup.sh"
 if [[ ${#JIP_SBS_API_TOKEN} -ge 32 ]]; then ok "SBS API token set (${#JIP_SBS_API_TOKEN} chars)"; else bad "SBS API token shorter than 32 characters"; fi
@@ -208,6 +237,10 @@ if grep -qx jip <<<"$running"; then
         && ok "jip: startup checks pass as the web-server user" || bad "jip: startup checks fail as the web-server user"
     compose exec -T -u "${JIP_CONTAINER_WEB_UID}" jip curl -fsS -o /dev/null http://localhost/health \
         && ok "jip: /health is UP inside the container" || bad "jip: /health is not UP inside the container"
+fi
+if grep -qx mock-dezi <<<"$running"; then
+    compose exec -T -u "${JIP_CONTAINER_WEB_UID}" mock-dezi curl -fsS -o /dev/null http://localhost/health \
+        && ok "mock-dezi: /health is UP inside the container" || bad "mock-dezi: /health is not UP inside the container"
 fi
 
 section "Reachability from the host (https via HAProxy, verified against the dev CA)"

@@ -7,6 +7,7 @@
 #  5. renders the HAProxy config with the JIP, mock DEZI and test SP backends
 #  6. installs the EngineBlock SBS drop-in (config/packages/dev/zz_jip_sbs.yaml)
 #  7. creates JIP's mock keys and grants the container's web-server user ACL access to them and var/
+#  8. creates the mock DEZI provider's signing keys and grants the same ACL access to them and its var/
 set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/_env.sh"
 
@@ -92,6 +93,21 @@ if [[ -x "${JIP_CODE_PATH}/bin/init-mock-keys" ]]; then
     # var/: read-write for the web-server user and this user, inherited by new entries; no world access.
     # Entries the container created belong to its user and already carry the inherited ACL.
     var="${JIP_CODE_PATH}/var"
+    mkdir -p "$var"
+    find "$var" -user "$(id -u)" ! -type l -exec chmod o-rwx {} + \
+        -exec setfacl -m "${web}:rwX,u:$(id -u):rwX" {} +
+    find "$var" -user "$(id -u)" -type d -exec setfacl -d -m "${web}:rwX,u:$(id -u):rwX" {} +
+fi
+
+if [[ -x "${MOCK_DEZI_CODE_PATH}/bin/init-keys" ]]; then
+    command -v setfacl >/dev/null || fail "setfacl is required (package acl)"
+    "${MOCK_DEZI_CODE_PATH}/bin/init-keys"
+    info "Granting the mock DEZI container's web-server user (uid ${JIP_CONTAINER_WEB_UID}) access to keys/ and var/"
+    web="u:${JIP_CONTAINER_WEB_UID}"
+    keys="${MOCK_DEZI_CODE_PATH}/keys"
+    setfacl -m "${web}:--x" "$keys"
+    setfacl -m "${web}:r--" "$keys"/*.pem
+    var="${MOCK_DEZI_CODE_PATH}/var"
     mkdir -p "$var"
     find "$var" -user "$(id -u)" ! -type l -exec chmod o-rwx {} + \
         -exec setfacl -m "${web}:rwX,u:$(id -u):rwX" {} +

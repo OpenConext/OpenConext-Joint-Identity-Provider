@@ -29,8 +29,8 @@ services:
   manageserver:
     image: ghcr.io/openconext/openconext-manage/manage-server:${MANAGE_VERSION:-9.7.2}
 
-  # The three POC applications use EngineBlock's development base image. Their code is created in
-  # later steps; the base entrypoint imports /config/haproxy/haproxy.crt into the system trust store.
+  # The three POC applications use EngineBlock's development base image. JIP's custom entrypoint
+  # imports the dev CA; the test SP uses the base entrypoint. The mock makes no outgoing calls.
   jip:
     image: ghcr.io/openconext/openconext-basecontainers/${JIP_PHP_IMAGE:-php85-apache2-node24:latest}
     profiles: ["jip"]
@@ -61,15 +61,31 @@ services:
       coreconextdev:
     hostname: jip.docker
 
+  # The mock DEZI provider (MOCK ONLY). It reads the client's public certificates from JIP's mock keys and makes
+  # no outgoing calls. Its entrypoint resets the mock's state and starts Apache only when the configuration,
+  # fixtures and keys are usable.
   mock-dezi:
     image: ghcr.io/openconext/openconext-basecontainers/${JIP_PHP_IMAGE:-php85-apache2-node24:latest}
     profiles: ["jip"]
+    entrypoint: ["/usr/local/bin/mock-dezi-entrypoint"]
+    command: ["apache2-foreground"]
     volumes:
       - ${MOCK_DEZI_CODE_PATH}:/var/www/html
-      - ${DEVCONF_CORE_DIR}/haproxy/haproxy.crt:/config/haproxy/haproxy.crt:ro
+      - ${JIP_DEVENV_DIR}/mock-dezi/entrypoint.sh:/usr/local/bin/mock-dezi-entrypoint:ro
+      - ${JIP_DEVENV_DIR}/mock-dezi/appconf.conf:/etc/apache2/sites-enabled/appconf.conf:ro
+      - ${JIP_CODE_PATH}/keys/mock/ggd-signing.crt:/etc/mock-dezi/client-keys/ggd-signing.crt:ro
+      - ${JIP_CODE_PATH}/keys/mock/ggd-decryption.crt:/etc/mock-dezi/client-keys/ggd-decryption.crt:ro
     environment:
       - APP_ENV=${JIP_APP_ENV:-dev}
       - APP_DEBUG=${JIP_APP_DEBUG:-true}
+      - MOCK_DEZI_CLIENT_KEYS_DIR=/etc/mock-dezi/client-keys
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "-s", "http://localhost/health"]
+      start_period: 30s
+      start_interval: 1s
+      interval: 10s
+      timeout: 2s
+      retries: 20
     networks:
       coreconextdev:
     hostname: mock-dezi.docker
