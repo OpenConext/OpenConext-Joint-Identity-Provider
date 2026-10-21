@@ -17,3 +17,5 @@ when@test:
     services:
         logger:
             class: Psr\Log\NullLogger
+        JointIdentityProvider\Tests\Support\TestProvider:
+            public: true

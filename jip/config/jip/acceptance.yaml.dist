@@ -42,6 +42,7 @@ provider:
   clients:
     ggd:
       client_id: '<from DEZI registration>'
+      redirect_uri: 'https://jip.govconext.example/oidc/callback'   # the return address registered with the CIBG (§10)
       authentication: private_key_jwt # or none, only when the CIBG confirms DEZI wants no client authentication (§14)
       signing_key:
         certificate: '/etc/jip/keys/ggd-signing-2026.crt'

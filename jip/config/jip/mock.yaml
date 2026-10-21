@@ -40,6 +40,7 @@ provider:
   clients:
     ggd:
       client_id: 'jip-mock-ggd'       # mock assumption: the mock's client registration
+      redirect_uri: 'https://jip.dev.openconext.local/oidc/callback'   # as registered at the mock
       # Stage 6: expected envelope audience is jip-mock-ggd-envelope, distinct from client_id.
       authentication: private_key_jwt
       signing_key:

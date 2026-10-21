@@ -11,3 +11,6 @@ framework:
 when@test:
     framework:
         test: true
+        # No test request reaches a network: the fake provider answers every outgoing request.
+        http_client:
+            mock_response_factory: JointIdentityProvider\Tests\Support\TestProvider

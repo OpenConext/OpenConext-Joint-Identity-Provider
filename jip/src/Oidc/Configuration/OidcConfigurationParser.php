@@ -92,9 +92,25 @@ final readonly class OidcConfigurationParser
         if (!$node->requireMap()) {
             return null;
         }
-        $node->allowOnly('client_id', 'authentication', 'signing_key', 'decryption_keys');
+        $node->allowOnly('client_id', 'redirect_uri', 'authentication', 'signing_key', 'decryption_keys');
 
         $clientId = $node->get('client_id')->requireString();
+
+        $redirectUriNode = $node->get('redirect_uri');
+        $redirectUri = $redirectUriNode->requireHttpsUrl();
+        if ($redirectUri !== null) {
+            $parts = parse_url($redirectUri);
+            if (
+                $parts === false || ($parts['path'] ?? '') !== ClientConfiguration::CALLBACK_PATH
+                || isset($parts['query']) || isset($parts['fragment'])
+            ) {
+                $redirectUriNode->error(sprintf(
+                    'must have the path %s and no query or fragment',
+                    ClientConfiguration::CALLBACK_PATH,
+                ));
+                $redirectUri = null;
+            }
+        }
 
         $authenticationNode = $node->get('authentication');
         $authenticationValue = $authenticationNode->requireString();
@@ -121,11 +137,21 @@ final readonly class OidcConfigurationParser
 
         $decryptionKeys = $this->parseDecryptionKeys($node->get('decryption_keys'));
 
-        if ($clientId === null || $authentication === null || !$signingKeyValid || $decryptionKeys === null) {
+        if (
+            $clientId === null || $redirectUri === null || $authentication === null || !$signingKeyValid
+            || $decryptionKeys === null
+        ) {
             return null;
         }
 
-        return new ClientConfiguration($name, $clientId, $authentication, $signingKey, $decryptionKeys);
+        return new ClientConfiguration(
+            $name,
+            $clientId,
+            $redirectUri,
+            $authentication,
+            $signingKey,
+            $decryptionKeys,
+        );
     }
 
     private function parseSigningKey(ConfigNode $node): ?SigningKey

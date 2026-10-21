@@ -52,6 +52,7 @@ final class ConfigurationLoaderTest extends TestCase
         self::assertSame(['id_token', 'envelope', 'statement'], array_keys($configuration->provider->approvedKeyAddresses));
         self::assertSame(['id_token', 'envelope', 'statement'], array_keys($configuration->provider->expectedIssuers));
         $client = $configuration->provider->oidc->clients['ggd'];
+        self::assertSame('https://jip.dev.openconext.local/oidc/callback', $client->redirectUri);
         self::assertSame(ClientAuthentication::PrivateKeyJwt, $client->authentication);
         self::assertSame(60, $client->signingKey?->assertionLifetimeSeconds);
         self::assertCount(1, $client->decryptionKeys);
@@ -411,6 +412,31 @@ final class ConfigurationLoaderTest extends TestCase
         ];
 
         // Clients and keys
+        yield 'missing client redirect URI' => [
+            [...self::CLIENT_PATH, 'redirect_uri'],
+            Fixture::ABSENT,
+            'provider.clients.ggd.redirect_uri: is missing',
+        ];
+        yield 'non-HTTPS client redirect URI' => [
+            [...self::CLIENT_PATH, 'redirect_uri'],
+            'http://jip.dev.openconext.local/oidc/callback',
+            'provider.clients.ggd.redirect_uri: must be an absolute https URL',
+        ];
+        yield 'client redirect URI with another path' => [
+            [...self::CLIENT_PATH, 'redirect_uri'],
+            'https://jip.dev.openconext.local/another-callback',
+            'provider.clients.ggd.redirect_uri: must have the path /oidc/callback and no query or fragment',
+        ];
+        yield 'client redirect URI with a query' => [
+            [...self::CLIENT_PATH, 'redirect_uri'],
+            'https://jip.dev.openconext.local/oidc/callback?login=1',
+            'provider.clients.ggd.redirect_uri: must have the path /oidc/callback and no query or fragment',
+        ];
+        yield 'client redirect URI with a fragment' => [
+            [...self::CLIENT_PATH, 'redirect_uri'],
+            'https://jip.dev.openconext.local/oidc/callback#login',
+            'provider.clients.ggd.redirect_uri: must have the path /oidc/callback and no query or fragment',
+        ];
         yield 'client without decryption key' => [
             [...self::CLIENT_PATH, 'decryption_keys'],
             [],
