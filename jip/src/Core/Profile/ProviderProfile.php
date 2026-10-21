@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace JointIdentityProvider\Core\Profile;
 
+use JointIdentityProvider\Core\Configuration\ProviderConfiguration;
 use JointIdentityProvider\Core\Configuration\Reader\ConfigNode;
+use JointIdentityProvider\Oidc\AuthenticatedLogin;
 use Symfony\Component\DependencyInjection\Attribute\AutoconfigureTag;
 
 /**
@@ -58,4 +60,10 @@ interface ProviderProfile
         ConfigNode $provider,
         ?int $engineBlockCallTimeoutSeconds,
     ): ?ProfileConfiguration;
+
+    /**
+     * Validates the provider's own messages for a login that passed the standard OIDC checks (design §2,
+     * §14). Makes no change to the transaction.
+     */
+    public function validateLogin(AuthenticatedLogin $login, ProviderConfiguration $provider): ProfileOutcome;
 }

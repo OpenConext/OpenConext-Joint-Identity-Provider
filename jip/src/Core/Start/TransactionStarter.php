@@ -6,6 +6,7 @@ namespace JointIdentityProvider\Core\Start;
 
 use JointIdentityProvider\Core\Configuration\JipConfiguration;
 use JointIdentityProvider\Core\Configuration\ServicePolicy;
+use JointIdentityProvider\Core\EngineBlock\ReturnUrl;
 use JointIdentityProvider\Core\Transaction\FailureType;
 use JointIdentityProvider\Core\Transaction\Transaction;
 use JointIdentityProvider\Core\Transaction\TransactionState;
@@ -39,7 +40,7 @@ final readonly class TransactionStarter
             return $this->refuse(StartOutcome::UNKNOWN_SERVICE, $request);
         }
 
-        if (!self::isEngineBlockReturnUrl($request->continueUrl, $configuration->engineBlock->returnUrlPrefix)) {
+        if (!ReturnUrl::isValid($request->continueUrl, $configuration->engineBlock->returnUrlPrefix)) {
             return $this->refuse(StartOutcome::INVALID_RETURN_URL, $request);
         }
 
@@ -112,20 +113,6 @@ final readonly class TransactionStarter
             BindingStatus::Absent => [TransactionState::Skipped, null],
             BindingStatus::Single => [TransactionState::Pending, null],
         };
-    }
-
-    /**
-     * The return URL must be the configured EngineBlock URL, optionally followed by a query.
-     */
-    private static function isEngineBlockReturnUrl(string $url, string $prefix): bool
-    {
-        if (preg_match('/^[\x21-\x7E]+$/', $url) !== 1 || str_contains($url, '#') || !str_starts_with($url, $prefix)) {
-            return false;
-        }
-
-        $rest = substr($url, strlen($prefix));
-
-        return $rest === '' || $rest[0] === '?';
     }
 
     private function refuse(string $reason, StartRequest $request): StartOutcome

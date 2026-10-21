@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace JointIdentityProvider\Profile\Dezi;
 
+use JointIdentityProvider\Core\Configuration\ProviderConfiguration;
 use JointIdentityProvider\Core\Configuration\Reader\ConfigNode;
+use JointIdentityProvider\Core\Profile\ProfileOutcome;
 use JointIdentityProvider\Core\Profile\ProviderProfile;
+use JointIdentityProvider\Oidc\AuthenticatedLogin;
 
 /**
  * The DEZI profile (design §2, §14–§16). It holds the DEZI-specific names; the core gets them from here
@@ -14,6 +17,7 @@ use JointIdentityProvider\Core\Profile\ProviderProfile;
 final readonly class DeziProfile implements ProviderProfile
 {
     public const string NAME = 'dezi';
+    public const string FAILURE_VALIDATION_UNAVAILABLE = 'dezi_validation_unavailable';
 
     // Statement claims that may be released (design §6). Technical claims such as loa_dezi and
     // verklaring_id are validated by the profile and never released.
@@ -132,5 +136,16 @@ final readonly class DeziProfile implements ProviderProfile
         }
 
         return new DeziRevocationConfiguration($mode, $statusAddress, $timeout, $decisionValidity);
+    }
+
+    public function validateLogin(AuthenticatedLogin $login, ProviderConfiguration $provider): ProfileOutcome
+    {
+        // UserInfo decryption and the envelope, statement and revocation checks (design §14–§16) are not
+        // implemented yet, so no DEZI login can pass.
+        return ProfileOutcome::failed(
+            self::FAILURE_VALIDATION_UNAVAILABLE,
+            false,
+            'DEZI proof validation is not implemented',
+        );
     }
 }

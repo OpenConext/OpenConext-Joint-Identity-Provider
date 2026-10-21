@@ -31,7 +31,24 @@ final readonly class Transaction
         public ?ProfileResult $profileResult = null,
         public ?DateTimeImmutable $resultDeadline = null,
         public ?string $failureType = null,
+        // Whether a new login can succeed after this failure; decides the restart link (design §13).
+        public bool $failureRestartable = false,
     ) {
+    }
+
+    public function atProvider(ProviderAttempt $attempt): self
+    {
+        return $this->replace(TransactionState::AtProvider, $attempt, null, false);
+    }
+
+    public function validating(): self
+    {
+        return $this->replace(TransactionState::Validating, $this->attempt, null, false);
+    }
+
+    public function failed(string $failureType, bool $restartable): self
+    {
+        return $this->replace(TransactionState::Failed, $this->attempt, $failureType, $restartable);
     }
 
     /**
@@ -98,5 +115,30 @@ final readonly class Transaction
             'deadline' => $this->deadline(),
             'failureType' => $this->failureType,
         ];
+    }
+
+    private function replace(
+        TransactionState $state,
+        ?ProviderAttempt $attempt,
+        ?string $failureType,
+        bool $failureRestartable,
+    ): self {
+        return new self(
+            $this->id,
+            $this->logId,
+            $this->serviceId,
+            $this->organisationId,
+            $this->userId,
+            $this->connectionPolicyVersionAtStart,
+            $this->organisationBindingValue,
+            $this->returnUrl,
+            $this->transactionDeadline,
+            $state,
+            $attempt,
+            $this->profileResult,
+            $this->resultDeadline,
+            $failureType,
+            $failureRestartable,
+        );
     }
 }

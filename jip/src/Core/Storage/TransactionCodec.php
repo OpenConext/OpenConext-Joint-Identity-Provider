@@ -48,6 +48,7 @@ final class TransactionCodec
                 ? null
                 : self::micros($transaction->resultDeadline),
             'failureType' => $transaction->failureType,
+            'failureRestartable' => $transaction->failureRestartable,
         ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
 
@@ -75,6 +76,11 @@ final class TransactionCodec
             self::profileResult($data['profileResult'] ?? null),
             ($data['resultDeadline'] ?? null) === null ? null : self::time($data, 'resultDeadline'),
             ($data['failureType'] ?? null) === null ? null : self::string($data, 'failureType'),
+            match ($data['failureRestartable'] ?? false) {
+                true => true,
+                false => false,
+                default => throw new UnexpectedValueException('The stored field failureRestartable is not a boolean.'),
+            },
         );
     }
 
