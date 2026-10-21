@@ -197,6 +197,47 @@ final class SqliteTransactionStoreTest extends TestCase
     }
 
     /**
+     * @return iterable<string, array{string, bool}>
+     */
+    public static function validUntilTimes(): iterable
+    {
+        yield 'just before validUntil' => ['+60 seconds -1 usec', true];
+        yield 'exactly at validUntil' => ['+60 seconds', false];
+        yield 'after validUntil' => ['+60 seconds +1 usec', false];
+    }
+
+    #[DataProvider('validUntilTimes')]
+    public function test_compare_and_set_refuses_a_write_at_or_after_valid_until(string $offset, bool $consumed): void
+    {
+        $callerTime = self::at('+10 seconds');
+        $clock = self::createStub(ClockInterface::class);
+        // The caller's time lies before validUntil; only the time sampled at write decides.
+        $clock->method('now')->willReturnOnConsecutiveCalls($callerTime, $callerTime, self::at($offset));
+        $store = new SqliteTransactionStore($this->path(), $clock);
+        $transaction = self::transaction('t1', TransactionState::Skipped);
+        self::assertTrue($store->add($transaction));
+
+        self::assertSame($consumed, $store->compareAndSet(
+            't1',
+            TransactionState::Skipped,
+            self::with($transaction, TransactionState::Consumed),
+            $callerTime,
+            self::at('+60 seconds'),
+        ));
+        self::assertSame($consumed ? TransactionState::Consumed : TransactionState::Skipped, $store->find('t1')?->state);
+    }
+
+    public function test_compare_and_set_refuses_a_caller_time_at_valid_until(): void
+    {
+        $store = $this->store();
+        $transaction = self::transaction('t1', TransactionState::Skipped);
+        $store->add($transaction);
+
+        self::assertFalse($store->compareAndSet('t1', TransactionState::Skipped, self::with($transaction, TransactionState::Consumed), self::at('+60 seconds'), self::at('+60 seconds')));
+        self::assertSame(TransactionState::Skipped, $store->find('t1')?->state);
+    }
+
+    /**
      * @return iterable<string, array{TransactionState, TransactionState, bool}>
      */
     public static function transitions(): iterable

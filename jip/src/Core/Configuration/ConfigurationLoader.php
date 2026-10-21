@@ -42,6 +42,18 @@ final readonly class ConfigurationLoader
             return $configuration;
         }
 
+        return $this->reload();
+    }
+
+    /**
+     * Reads the current configuration again, also when the request already holds a snapshot, and makes
+     * it the request's snapshot. Used where a decision must rest on the current approved policy.
+     *
+     * @throws InvalidConfiguration
+     */
+    public function reload(): JipConfiguration
+    {
+        $request = $this->requestStack?->getMainRequest();
         $errors = new ConfigurationErrors();
 
         $data = $this->readFile($errors);

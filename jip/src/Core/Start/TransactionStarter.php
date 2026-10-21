@@ -6,6 +6,7 @@ namespace JointIdentityProvider\Core\Start;
 
 use JointIdentityProvider\Core\Configuration\JipConfiguration;
 use JointIdentityProvider\Core\Configuration\ServicePolicy;
+use JointIdentityProvider\Core\EngineBlock\LogFields;
 use JointIdentityProvider\Core\EngineBlock\ReturnUrl;
 use JointIdentityProvider\Core\Transaction\FailureType;
 use JointIdentityProvider\Core\Transaction\Transaction;
@@ -23,7 +24,6 @@ final readonly class TransactionStarter
     private const int MAX_ADD_ATTEMPTS = 3;
     private const string TRANSACTION_ID = '/^[A-Za-z0-9_-]{43}$/';
     private const string LOG_ID = '/^[0-9a-f]{16}$/';
-    private const string LOGGABLE_REQUEST_ID = '/^[A-Za-z0-9_.:-]{1,128}$/';
 
     public function __construct(
         private TransactionStore $store,
@@ -121,8 +121,8 @@ final readonly class TransactionStarter
             'JIP start refused ({reason}) for service {service}, EngineBlock request {eb_request_id}',
             [
                 'reason' => $reason,
-                'service' => self::loggable($request->serviceId),
-                'eb_request_id' => self::engineBlockRequestId($request->continueUrl),
+                'service' => LogFields::entityId($request->serviceId),
+                'eb_request_id' => LogFields::engineBlockRequestId($request->continueUrl),
             ],
         );
 
@@ -139,26 +139,10 @@ final readonly class TransactionStarter
                 'state' => $transaction->state->value,
                 'failure_type' => $transaction->failureType === null ? '' : ' (' . $transaction->failureType . ')',
                 'service' => $transaction->serviceId,
-                'organisation' => self::loggable($transaction->organisationId),
+                'organisation' => LogFields::entityId($transaction->organisationId),
                 'policy_version' => $transaction->connectionPolicyVersionAtStart,
-                'eb_request_id' => self::engineBlockRequestId($transaction->returnUrl),
+                'eb_request_id' => LogFields::engineBlockRequestId($transaction->returnUrl),
             ],
         );
-    }
-
-    private static function engineBlockRequestId(string $returnUrl): string
-    {
-        parse_str((string) parse_url($returnUrl, PHP_URL_QUERY), $query);
-        $id = $query['ID'] ?? null;
-
-        return is_string($id) && preg_match(self::LOGGABLE_REQUEST_ID, $id) === 1 ? $id : '-';
-    }
-
-    /**
-     * Entity IDs come from EngineBlock; anything that could break a log line is replaced.
-     */
-    private static function loggable(string $entityId): string
-    {
-        return preg_match('/^[\x21-\x7E]{1,512}$/', $entityId) === 1 ? $entityId : '[unprintable]';
     }
 }

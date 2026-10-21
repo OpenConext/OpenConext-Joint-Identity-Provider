@@ -84,16 +84,26 @@ final class SqliteTransactionStore implements TransactionStore
         TransactionState $expectedState,
         Transaction $replacement,
         DateTimeImmutable $now,
+        ?DateTimeImmutable $validUntil = null,
     ): bool {
         if ($replacement->id !== $transactionId) {
             throw new InvalidArgumentException('The replacement must carry the same transaction ID.');
         }
 
-        return $this->write(function (PDO $db) use ($transactionId, $expectedState, $replacement, $now): bool {
+        return $this->write(function (PDO $db) use (
+            $transactionId,
+            $expectedState,
+            $replacement,
+            $now,
+            $validUntil,
+        ): bool {
             $this->prune($db);
             $current = $this->select($db, 'id', $transactionId);
             $effectiveNow = max($now, $this->clock->now());
-            if ($current === null || $current->state !== $expectedState || $current->isExpired($effectiveNow)) {
+            if (
+                $current === null || $current->state !== $expectedState || $current->isExpired($effectiveNow)
+                || ($validUntil !== null && $effectiveNow >= $validUntil)
+            ) {
                 return false;
             }
 

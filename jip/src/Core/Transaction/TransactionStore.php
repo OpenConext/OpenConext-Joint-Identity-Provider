@@ -28,7 +28,8 @@ interface TransactionStore
     /**
      * Atomically replaces the stored transaction with $replacement, only while the stored one is in
      * $expectedState and its deadline lies after both $now and the current time sampled inside the
-     * atomic operation at write time, after acquiring any lock. Returns whether the replacement happened.
+     * atomic operation at write time, after acquiring any lock. When $validUntil is given, that sampled
+     * time must also lie before it. Returns whether the replacement happened.
      * The replacement ID must equal $transactionId. Inside the atomic operation, implementations must
      * call the stored record's assertCanBeReplacedBy($replacement) before writing. An invariant
      * violation throws InvalidArgumentException and leaves the stored record unchanged.
@@ -38,5 +39,6 @@ interface TransactionStore
         TransactionState $expectedState,
         Transaction $replacement,
         DateTimeImmutable $now,
+        ?DateTimeImmutable $validUntil = null,
     ): bool;
 }
