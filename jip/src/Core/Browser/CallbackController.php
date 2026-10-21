@@ -6,7 +6,10 @@ namespace JointIdentityProvider\Core\Browser;
 
 use JointIdentityProvider\Core\Configuration\ConfigurationLoader;
 use JointIdentityProvider\Core\Configuration\JipConfiguration;
+use JointIdentityProvider\Core\EngineBlock\ReturnUrl;
 use JointIdentityProvider\Core\Profile\ProfileRegistry;
+use JointIdentityProvider\Core\Profile\ProfileResult;
+use JointIdentityProvider\Core\Result\ResultAcceptance;
 use JointIdentityProvider\Core\Transaction\FailureType;
 use JointIdentityProvider\Core\Transaction\Transaction;
 use JointIdentityProvider\Core\Transaction\TransactionState;
@@ -163,20 +166,13 @@ final readonly class CallbackController
                 return $this->fail(
                     $transaction,
                     $configuration,
-                    $outcome->failureType ?? FailureType::ResultCompletionUnavailable->value,
+                    $outcome->failureType ?? FailureType::InternalError->value,
                     $outcome->restartable,
                     $outcome->detail,
                 );
             }
 
-            // The account binding and the claim mapping are not implemented yet; never succeed without them.
-            return $this->fail(
-                $transaction,
-                $configuration,
-                FailureType::ResultCompletionUnavailable->value,
-                false,
-                'account binding is not implemented',
-            );
+            return $this->succeed($transaction, $outcome->result, $configuration);
         } catch (OidcFailure $failure) {
             return $this->fail(
                 $transaction,
@@ -186,6 +182,36 @@ final readonly class CallbackController
                 $failure->detail,
             );
         }
+    }
+
+    /**
+     * Applies the core's checks to the verified profile result; on success the transaction moves to
+     * `succeeded` and the browser returns to EngineBlock with only the request ID in the URL.
+     */
+    private function succeed(
+        Transaction $validating,
+        ProfileResult $result,
+        JipConfiguration $configuration,
+    ): Response {
+        $accepted = ResultAcceptance::accept($validating, $result, $configuration, $this->clock->now());
+        if ($accepted instanceof FailureType) {
+            return $this->fail($validating, $configuration, $accepted->value, $accepted->isRestartable(), 'core check');
+        }
+
+        if (!ReturnUrl::isValid($validating->returnUrl, $configuration->engineBlock->returnUrlPrefix)) {
+            $type = FailureType::InvalidReturnUrl;
+
+            return $this->fail($validating, $configuration, $type->value, false, 'stored return URL');
+        }
+
+        $now = $this->clock->now();
+        if (!$this->store->compareAndSet($validating->id, TransactionState::Validating, $accepted, $now)) {
+            return $this->restartable(FailureType::Expired, $validating, $configuration);
+        }
+
+        $this->logger->info('JIP callback {log_id}: succeeded, back to EngineBlock', ['log_id' => $validating->logId]);
+
+        return BrowserPages::redirect($validating->returnUrl);
     }
 
     private function internalError(

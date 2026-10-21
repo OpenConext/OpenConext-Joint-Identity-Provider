@@ -18,7 +18,9 @@ enum FailureType: string
     case CallbackMismatch = 'callback_mismatch';
     case ServiceNotConfigured = 'service_not_configured';
     case InvalidReturnUrl = 'invalid_return_url';
-    case ResultCompletionUnavailable = 'result_completion_unavailable';
+    case BindingMismatch = 'binding_mismatch';
+    case RequiredClaimMissing = 'required_claim_missing';
+    case NothingToRelease = 'nothing_to_release';
 
     public function isRestartable(): bool
     {

@@ -11,7 +11,6 @@ use JointIdentityProvider\Core\Storage\SqliteTransactionStore;
 use JointIdentityProvider\Core\Transaction\Transaction;
 use JointIdentityProvider\Core\Transaction\TransactionState;
 use JointIdentityProvider\Core\Transaction\TransactionStore;
-use JointIdentityProvider\Profile\Dezi\DeziProfile;
 use JointIdentityProvider\Tests\Support\ConfigurationFixture as Fixture;
 use JointIdentityProvider\Tests\Support\TestProvider;
 use JointIdentityProvider\Tests\Support\VerifyingProfile;
@@ -176,10 +175,10 @@ final class BrowserFlowTest extends WebTestCase
         $this->returnFromProvider(['code' => 'the-code', 'state' => $query['state']]);
 
         self::assertResponseStatusCodeSame(403);
-        self::assertStringContainsString(DeziProfile::FAILURE_VALIDATION_UNAVAILABLE, $this->bodyText());
+        self::assertStringContainsString('userinfo_refused', $this->bodyText());
         $transaction = $this->stored($id);
         self::assertSame(TransactionState::Failed, $transaction->state);
-        self::assertSame(DeziProfile::FAILURE_VALIDATION_UNAVAILABLE, $transaction->failureType);
+        self::assertSame('userinfo_refused', $transaction->failureType);
         self::assertNull($transaction->profileResult);
         self::assertSame(1, $this->provider->countRequests([TestProvider::TOKEN]));
         $form = $this->provider->lastTokenRequestForm();
@@ -201,7 +200,7 @@ final class BrowserFlowTest extends WebTestCase
 
         self::assertResponseStatusCodeSame(403);
         self::assertSame(1, $this->provider->countRequests([TestProvider::TOKEN]));
-        self::assertSame(DeziProfile::FAILURE_VALIDATION_UNAVAILABLE, $this->stored($id)->failureType);
+        self::assertSame('userinfo_refused', $this->stored($id)->failureType);
     }
 
     public function test_a_cancel_at_the_provider_fails_the_transaction_with_a_restart_link(): void
@@ -286,7 +285,7 @@ final class BrowserFlowTest extends WebTestCase
 
         $this->provider->nonce = $firstQuery['nonce'];
         $this->returnFromProvider(['code' => 'code-1', 'state' => $firstQuery['state']]);
-        self::assertSame(DeziProfile::FAILURE_VALIDATION_UNAVAILABLE, $this->stored($first)->failureType);
+        self::assertSame('userinfo_refused', $this->stored($first)->failureType);
     }
 
     public function test_the_state_of_one_tab_with_the_cookie_of_another_is_refused(): void
@@ -397,24 +396,79 @@ final class BrowserFlowTest extends WebTestCase
         self::assertSame(TransactionState::AtProvider, $this->stored($id)->state);
     }
 
-    public function test_a_verified_profile_outcome_is_not_yet_a_success(): void
+    public function test_a_verified_profile_outcome_still_needs_the_account_binding(): void
     {
         self::getContainer()->set(ProfileRegistry::class, new ProfileRegistry([new VerifyingProfile()]));
-        $id = $this->start(['900000001']);
+        $id = $this->start(['900000002']);
         $query = $this->handOff($id);
 
         $this->returnFromProvider(['code' => 'the-code', 'state' => $query['state']]);
 
         $transaction = $this->stored($id);
         self::assertSame(TransactionState::Failed, $transaction->state);
-        self::assertSame('result_completion_unavailable', $transaction->failureType);
+        self::assertSame('binding_mismatch', $transaction->failureType);
+        self::assertFalse($transaction->failureRestartable);
         self::assertNull($transaction->profileResult);
+        self::assertSame([], $this->links());
+    }
+
+    public function test_the_binding_is_an_exact_string_comparison(): void
+    {
+        self::getContainer()->set(ProfileRegistry::class, new ProfileRegistry([new VerifyingProfile([
+            'dezi_nummer' => ['0900000001'],
+            'abonnee_nummer' => ['90000001'],
+        ])]));
+        $id = $this->start(['900000001']);
+        $query = $this->handOff($id);
+
+        $this->returnFromProvider(['code' => 'the-code', 'state' => $query['state']]);
+
+        self::assertSame('binding_mismatch', $this->stored($id)->failureType);
+    }
+
+    public function test_a_missing_required_claim_fails_the_transaction(): void
+    {
+        self::getContainer()->set(ProfileRegistry::class, new ProfileRegistry([new VerifyingProfile([
+            'dezi_nummer' => ['900000001'],
+        ])]));
+        $id = $this->start(['900000001']);
+        $query = $this->handOff($id);
+
+        $this->returnFromProvider(['code' => 'the-code', 'state' => $query['state']]);
+
+        self::assertSame('required_claim_missing', $this->stored($id)->failureType);
+        self::assertNull($this->stored($id)->profileResult);
+    }
+
+    public function test_a_bound_result_succeeds_and_returns_to_engineblock_with_only_the_request_id(): void
+    {
+        self::getContainer()->set(ProfileRegistry::class, new ProfileRegistry([new VerifyingProfile([
+            'dezi_nummer' => ['900000001'],
+            'abonnee_nummer' => ['90000001'],
+            'achternaam' => ['Mockarts'],
+        ])]));
+        $id = $this->start(['900000001']);
+        $query = $this->handOff($id);
+
+        $this->returnFromProvider(['code' => 'the-code', 'state' => $query['state']]);
+
+        self::assertResponseRedirects(self::RETURN_URL, 302);
+        $transaction = $this->stored($id);
+        self::assertSame(TransactionState::Succeeded, $transaction->state);
+        // Only the claims the service releases are kept; achternaam is not on its release list.
+        self::assertSame(
+            ['dezi_nummer' => ['900000001'], 'abonnee_nummer' => ['90000001']],
+            $transaction->profileResult?->verifiedClaims(),
+        );
+        self::assertNotNull($transaction->resultDeadline);
+        self::assertLessThanOrEqual($transaction->transactionDeadline, $transaction->resultDeadline);
+        self::assertNull($this->cookie($transaction));
     }
 
     public function test_an_unexpected_profile_exception_fails_with_a_safe_support_page(): void
     {
         $profile = $this->createMock(ProviderProfile::class);
-        $dezi = new DeziProfile();
+        $dezi = Fixture::deziProfile();
         $profile->method('name')->willReturn($dezi->name());
         $profile->method('messageTypes')->willReturn($dezi->messageTypes());
         $profile->method('claimNames')->willReturn($dezi->claimNames());

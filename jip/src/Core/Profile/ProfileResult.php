@@ -24,8 +24,8 @@ interface ProfileResult
     public function hardExpiry(): DateTimeImmutable;
 
     /**
-     * Profile-owned data that the delivery-time recheck needs, kept with the transaction. It holds no
-     * secrets and no raw claim values.
+     * Profile-owned data that the delivery-time recheck needs, kept with the transaction (design §13). It
+     * holds no secrets and no released claim values.
      *
      * @return array<string, string|int|null>
      */

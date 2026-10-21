@@ -38,17 +38,47 @@ final readonly class Transaction
 
     public function atProvider(ProviderAttempt $attempt): self
     {
-        return $this->replace(TransactionState::AtProvider, $attempt, null, false);
+        return $this->replace(TransactionState::AtProvider, $attempt, null, false, null, $this->resultDeadline);
     }
 
     public function validating(): self
     {
-        return $this->replace(TransactionState::Validating, $this->attempt, null, false);
+        return $this->replace(TransactionState::Validating, $this->attempt, null, false, null, $this->resultDeadline);
+    }
+
+    /**
+     * The result deadline is the earlier of the transaction deadline and $hardExpiry (design §13).
+     */
+    public function succeeded(ProfileResult $result, DateTimeImmutable $hardExpiry): self
+    {
+        return $this->replace(
+            TransactionState::Succeeded,
+            $this->attempt,
+            null,
+            false,
+            $result,
+            min($this->transactionDeadline, $hardExpiry),
+        );
+    }
+
+    /**
+     * A consumed transaction keeps no result: it is never delivered again.
+     */
+    public function consumed(): self
+    {
+        return $this->replace(TransactionState::Consumed, $this->attempt, null, false, null, $this->resultDeadline);
     }
 
     public function failed(string $failureType, bool $restartable): self
     {
-        return $this->replace(TransactionState::Failed, $this->attempt, $failureType, $restartable);
+        return $this->replace(
+            TransactionState::Failed,
+            $this->attempt,
+            $failureType,
+            $restartable,
+            null,
+            $this->resultDeadline,
+        );
     }
 
     /**
@@ -122,6 +152,8 @@ final readonly class Transaction
         ?ProviderAttempt $attempt,
         ?string $failureType,
         bool $failureRestartable,
+        ?ProfileResult $profileResult,
+        ?DateTimeImmutable $resultDeadline,
     ): self {
         return new self(
             $this->id,
@@ -135,8 +167,8 @@ final readonly class Transaction
             $this->transactionDeadline,
             $state,
             $attempt,
-            $this->profileResult,
-            $this->resultDeadline,
+            $profileResult,
+            $resultDeadline,
             $failureType,
             $failureRestartable,
         );
