@@ -3,6 +3,7 @@
 # OK = verified, MISSING = prerequisite not (yet) supplied, FAIL = wrong configuration.
 set -uo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/_env.sh"
+source "${JIP_DEVENV_DIR}/bin/_haproxy.sh"
 
 fails=0; missing=0
 ok()   { printf '  \e[32mOK\e[0m      %s\n' "$*"; }
@@ -137,6 +138,9 @@ if [[ ${#JIP_SBS_API_TOKEN} -ge 32 ]]; then ok "SBS API token set (${#JIP_SBS_AP
 for f in backends.map haproxy.cfg; do
     [[ -s "${JIP_DEVENV_DIR}/haproxy/generated/$f" ]] || { bad "haproxy/generated/$f missing"; continue; }
 done
+jip_haproxy_logging_is_safe "${JIP_DEVENV_DIR}/haproxy/generated/haproxy.cfg" \
+    && ok "HAProxy logs omit request URIs and headers" \
+    || bad "HAProxy logging is unsafe or unsupported: run devenv/bin/setup.sh"
 for be in jip_be mock-dezi_be jip-test-sp_be; do
     grep -q "^backend ${be}$" "${JIP_DEVENV_DIR}/haproxy/generated/haproxy.cfg" 2>/dev/null \
         && grep -q " ${be}$" "${JIP_DEVENV_DIR}/haproxy/generated/backends.map" \

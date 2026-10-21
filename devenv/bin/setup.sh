@@ -10,6 +10,7 @@
 #  8. creates the mock DEZI provider's signing keys and grants the same ACL access to them and its var/
 set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/_env.sh"
+source "${JIP_DEVENV_DIR}/bin/_haproxy.sh"
 
 info() { printf '\e[1;32m==>\e[0m %s\n' "$*"; }
 fail() { printf '\e[1;31mERROR:\e[0m %s\n' "$*" >&2; exit 1; }
@@ -69,13 +70,14 @@ mkdir -p "$(dirname "${DEV_CA_CERT}")"
 cp "${haproxy_dir}/haproxy.crt" "${DEV_CA_CERT}"
 info "Dev CA certificate: ${DEV_CA_CERT}"
 
+# Keep credentials out of proxy logs too: the default HTTP log includes the full request URI.
 info "Rendering HAProxy config with the JIP backends"
 generated="${JIP_DEVENV_DIR}/haproxy/generated"
 mkdir -p "$generated"
 { cat "${haproxy_dir}/backends.map"; echo; cat "${JIP_DEVENV_DIR}/haproxy/jip-backends.map"; } \
     | sed '/^[[:space:]]*$/d' > "${generated}/backends.map"
-{ cat "${haproxy_dir}/haproxy.cfg"; echo; cat "${JIP_DEVENV_DIR}/haproxy/jip-backends.cfg"; } \
-    > "${generated}/haproxy.cfg"
+jip_render_haproxy "${haproxy_dir}/haproxy.cfg" "${JIP_DEVENV_DIR}/haproxy/jip-backends.cfg" \
+    "${generated}/haproxy.cfg" || fail "HAProxy rendering failed; the previous configuration was kept"
 
 info "Installing the EngineBlock SBS drop-in"
 install -m 644 "${JIP_DEVENV_DIR}/engine/zz_jip_sbs.yaml" \
