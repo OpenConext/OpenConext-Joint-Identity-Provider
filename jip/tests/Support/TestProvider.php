@@ -22,9 +22,20 @@ final class TestProvider
     public const string TOKEN = self::ISSUER . '/token';
     public const string USERINFO = self::ISSUER . '/userinfo';
     public const string ID_TOKEN_JWKS = self::ISSUER . '/openid/connect/jwks.json';
+    public const string ENVELOPE_JWKS = self::ISSUER . '/envelope/jwks.json';
     public const string STATEMENT_JWKS = self::ISSUER . '/dezi/jwks.json';
+    public const string STATUS_PREFIX = self::ISSUER . '/status/v1/verklaring/';
     public const string CLIENT_ID = 'jip-mock-ggd';
     public const string KID = 'test-id-token-key';
+    public const string ENVELOPE_KID = 'test-envelope-key';
+    public const string STATEMENT_KID = 'test-statement-key';
+    public const string ENVELOPE_ISSUER = 'auth.mock-dezi.dev.openconext.local';
+    public const string STATEMENT_ISSUER = 'abonnee.mock-dezi.dev.openconext.local';
+    public const string ENVELOPE_AUDIENCE = 'jip-mock-ggd-envelope';
+    public const string LOA_AUTHN = 'http://eidas.europa.eu/LoA/high';
+    public const string LOA_DEZI = 'http://eidas.europe.eu/LoA/high';
+    public const string VERKLARING_ID = 'd3e2a1c0-0001-4000-8000-000000000001';
+    public const string SUBJECT = 'pairwise-subject';
 
     /** @var list<array{method: string, url: string, options: array<string, mixed>}> */
     public array $requests = [];
@@ -40,6 +51,35 @@ final class TestProvider
 
     /** @var array<string, mixed> ID-token claims to add or, with null, remove */
     public array $idTokenClaims = [];
+
+    /** The certificate UserInfo is encrypted to; without one, UserInfo answers 404. */
+    public ?string $userInfoRecipient = null;
+
+    /** @var array<string, mixed> JWE header values to add or replace */
+    public array $userInfoHeader = [];
+
+    /** @var array<string, mixed> envelope claims to add or replace; the value ABSENT removes one */
+    public array $envelopeClaims = [];
+
+    /** @var array<string, mixed> statement claims to add or replace; the value ABSENT removes one */
+    public array $statementClaims = [];
+
+    /** @var array<string, mixed> header values to add or replace */
+    public array $envelopeHeader = [];
+
+    /** @var array<string, mixed> header values to add or replace */
+    public array $statementHeader = [];
+
+    public string $envelopeSigningKey = self::ENVELOPE_KID;
+    public string $statementSigningKey = self::STATEMENT_KID;
+
+    /** The status every status check answers, for the ID it was asked about. */
+    public string $status = 'actief';
+
+    /** The time the messages are issued at; null for the current time. */
+    public ?int $now = null;
+
+    public const string ABSENT = "\0absent";
 
     /** @var array<string, array{OpenSSLAsymmetricKey, string, string}> */
     private static array $keys = [];
@@ -72,14 +112,134 @@ final class TestProvider
         return match ($url) {
             self::DISCOVERY => self::json($this->discovery),
             self::ID_TOKEN_JWKS => self::json(['keys' => [self::publicJwk(self::KID)]]),
+            self::ENVELOPE_JWKS => self::json(['keys' => [self::publicJwk(self::ENVELOPE_KID, self::ENVELOPE_KID)]]),
+            self::STATEMENT_JWKS => self::json(['keys' => [self::publicJwk(self::STATEMENT_KID, self::STATEMENT_KID)]]),
             self::TOKEN => self::json([
                 'access_token' => 'test-access-token',
                 'token_type' => 'Bearer',
                 'expires_in' => 300,
                 'id_token' => $this->idToken(),
             ]),
-            default => new MockResponse('not found', ['http_code' => 404]),
+            self::USERINFO => $this->userInfoRecipient === null
+                ? new MockResponse('not found', ['http_code' => 404])
+                : new MockResponse($this->userInfo(), ['response_headers' => ['Content-Type' => 'application/jwt']]),
+            default => str_starts_with($url, self::STATUS_PREFIX)
+                ? self::json(['verklaringId' => rawurldecode(substr($url, strlen(self::STATUS_PREFIX))), 'status' => $this->status])
+                : new MockResponse('not found', ['http_code' => 404]),
         };
+    }
+
+    public function statusUrl(string $verklaringId = self::VERKLARING_ID): string
+    {
+        return self::STATUS_PREFIX . $verklaringId;
+    }
+
+    /**
+     * The UserInfo answer: a JWE (RSA-OAEP, A256CBC-HS512) to $userInfoRecipient around the signed envelope,
+     * which carries the sealed statement. Built with plain OpenSSL, independently of JIP's JOSE code.
+     */
+    public function userInfo(): string
+    {
+        if ($this->userInfoRecipient === null) {
+            throw new RuntimeException('No UserInfo recipient is set.');
+        }
+
+        return self::encrypt($this->envelope(), $this->userInfoRecipient, $this->userInfoHeader);
+    }
+
+    public function envelope(): string
+    {
+        $now = $this->now ?? time();
+        $claims = self::apply([
+            'iss' => self::ENVELOPE_ISSUER,
+            'aud' => self::ENVELOPE_AUDIENCE,
+            'iat' => $now,
+            'exp' => $now + 300,
+            'loa_authn' => self::LOA_AUTHN,
+            'verklaring_id' => self::VERKLARING_ID,
+            'verklaring' => $this->statement(),
+        ], $this->envelopeClaims);
+
+        return self::sign(
+            self::apply(['alg' => 'RS256', 'kid' => self::ENVELOPE_KID], $this->envelopeHeader),
+            $claims,
+            $this->envelopeSigningKey,
+        );
+    }
+
+    public function statement(): string
+    {
+        $now = $this->now ?? time();
+        $claims = self::apply([
+            'jti' => 'b5c1f0a2-0000-4000-8000-000000000001',
+            'iss' => self::STATEMENT_ISSUER,
+            'nbf' => $now - 60,
+            'exp' => $now + 86400,
+            'json_schema' => self::ISSUER . '/schema/verklaring-mock.json',
+            'dezi_nummer' => '900000001',
+            'voorletters' => 'A.',
+            'voorvoegsel' => null,
+            'achternaam' => 'Mockarts',
+            'abonnee_nummer' => '90000001',
+            'abonnee_naam' => 'Mock GGD Noord',
+            'rol_code' => '01.000',
+            'rol_naam' => 'Arts',
+            'rol_code_bron' => 'mock-bron',
+            'loa_dezi' => self::LOA_DEZI,
+            'verklaring_id' => self::VERKLARING_ID,
+            'status_uri' => self::ISSUER . '/statement-link/status/' . self::VERKLARING_ID,
+            'revocatie_controle_uri' => self::ISSUER . '/statement-link/revocatie/' . self::VERKLARING_ID,
+        ], $this->statementClaims);
+
+        return self::sign(
+            self::apply(
+                ['alg' => 'RS256', 'kid' => self::STATEMENT_KID, 'jku' => self::STATEMENT_JWKS],
+                $this->statementHeader,
+            ),
+            $claims,
+            $this->statementSigningKey,
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $header values to add or replace in {alg, enc, kid}
+     */
+    public static function encrypt(string $payload, string $recipientPem, array $header = []): string
+    {
+        $header = self::apply(['alg' => 'RSA-OAEP', 'enc' => 'A256CBC-HS512'], $header);
+        $protected = self::b64(self::encode($header));
+        $cek = random_bytes(64);
+        $iv = random_bytes(16);
+        $ciphertext = openssl_encrypt($payload, 'aes-256-cbc', substr($cek, 32), OPENSSL_RAW_DATA, $iv);
+        $digest = ($header['alg'] ?? null) === 'RSA-OAEP-256' ? 'sha256' : 'sha1';
+        if (
+            $ciphertext === false
+            || !openssl_public_encrypt($cek, $encryptedKey, $recipientPem, OPENSSL_PKCS1_OAEP_PADDING, $digest)
+            || !is_string($encryptedKey)
+        ) {
+            throw new RuntimeException('Cannot encrypt a test message.');
+        }
+        $mac = hash_hmac('sha512', $protected . $iv . $ciphertext . pack('J', strlen($protected) * 8), substr($cek, 0, 32), true);
+
+        return implode('.', [$protected, self::b64($encryptedKey), self::b64($iv), self::b64($ciphertext), self::b64(substr($mac, 0, 32))]);
+    }
+
+    /**
+     * @param array<string, mixed> $values
+     * @param array<string, mixed> $changes
+     * @return array<string, mixed>
+     */
+    private static function apply(array $values, array $changes): array
+    {
+        foreach ($changes as $name => $value) {
+            if ($value === self::ABSENT) {
+                unset($values[$name]);
+            } else {
+                $values[$name] = $value;
+            }
+        }
+
+        return $values;
     }
 
     /**
@@ -114,10 +274,10 @@ final class TestProvider
 
     public function idToken(): string
     {
-        $now = time();
+        $now = $this->now ?? time();
         $claims = [
             'iss' => self::ISSUER,
-            'sub' => 'pairwise-subject',
+            'sub' => self::SUBJECT,
             'aud' => self::CLIENT_ID,
             'iat' => $now,
             'exp' => $now + 300,

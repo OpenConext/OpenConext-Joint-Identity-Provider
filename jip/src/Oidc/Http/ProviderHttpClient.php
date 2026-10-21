@@ -21,11 +21,13 @@ final readonly class ProviderHttpClient
     }
 
     /**
+     * @param array<string, string> $headers replace the default headers of the same name
+     * @param int|null $timeoutSeconds a shorter limit than TIMEOUT_SECONDS for this request
      * @throws NoAnswer
      */
-    public function get(string $url): ProviderResponse
+    public function get(string $url, array $headers = [], ?int $timeoutSeconds = null): ProviderResponse
     {
-        return $this->send('GET', $url, []);
+        return $this->send('GET', $url, ['headers' => $headers + ['Accept' => 'application/json']], $timeoutSeconds);
     }
 
     /**
@@ -34,19 +36,20 @@ final readonly class ProviderHttpClient
      */
     public function postForm(string $url, array $form): ProviderResponse
     {
-        return $this->send('POST', $url, ['body' => $form]);
+        return $this->send('POST', $url, ['body' => $form], null);
     }
 
     /**
      * @param array<string, mixed> $options
      */
-    private function send(string $method, string $url, array $options): ProviderResponse
+    private function send(string $method, string $url, array $options, ?int $timeoutSeconds): ProviderResponse
     {
+        $timeout = min($timeoutSeconds ?? self::TIMEOUT_SECONDS, self::TIMEOUT_SECONDS);
         $options += [
             'headers' => ['Accept' => 'application/json'],
             'max_redirects' => 0,
-            'timeout' => self::TIMEOUT_SECONDS,
-            'max_duration' => self::TIMEOUT_SECONDS,
+            'timeout' => $timeout,
+            'max_duration' => $timeout,
             'crypto_method' => STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT,
             'on_progress' => static function (int $downloaded, int $expected): void {
                 if ($downloaded > self::MAX_BODY_BYTES || $expected > self::MAX_BODY_BYTES) {

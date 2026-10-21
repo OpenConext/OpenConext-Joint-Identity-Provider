@@ -14,7 +14,12 @@ use JointIdentityProvider\Oidc\Keys\KeyResolver;
 use JointIdentityProvider\Oidc\OidcClient;
 use JointIdentityProvider\Oidc\Token\ClientAssertionFactory;
 use JointIdentityProvider\Oidc\Token\TokenClient;
+use JointIdentityProvider\Profile\Dezi\DeziProfile;
+use JointIdentityProvider\Profile\Dezi\ProofValidator;
+use JointIdentityProvider\Profile\Dezi\RevocationChecker;
+use JointIdentityProvider\Profile\Dezi\UserInfoReader;
 use JointIdentityProvider\Tests\Support\ConfigurationFixture as Fixture;
+use RuntimeException;
 use Symfony\Component\Clock\MockClock;
 use Symfony\Component\HttpClient\MockHttpClient;
 
@@ -82,5 +87,25 @@ final class OidcFixture
     public function client(): OidcClient
     {
         return new OidcClient($this->metadata(), $this->tokens(), $this->idTokens());
+    }
+
+    public function deziProfile(): DeziProfile
+    {
+        return new DeziProfile(
+            new UserInfoReader($this->http),
+            new ProofValidator(new SignedMessageVerifier($this->keys())),
+            new RevocationChecker($this->http, $this->clock),
+            $this->clock,
+        );
+    }
+
+    /**
+     * The fake provider's UserInfo is encrypted to this fixture's decryption certificate.
+     */
+    public function decryptionCertificate(): string
+    {
+        $pem = file_get_contents($this->configFixture->directory . '/decryption.crt');
+
+        return is_string($pem) ? $pem : throw new RuntimeException('No decryption certificate.');
     }
 }

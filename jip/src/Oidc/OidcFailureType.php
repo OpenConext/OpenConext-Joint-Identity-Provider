@@ -24,6 +24,8 @@ enum OidcFailureType: string
     case KeySetInvalid = 'key_set_invalid';
     case UnknownKey = 'unknown_key';
     case IdTokenInvalid = 'id_token_invalid';
+    // A provider-signed message other than the ID token; the profile names it by its own type.
+    case MessageInvalid = 'message_invalid';
 
     public function isRestartable(): bool
     {

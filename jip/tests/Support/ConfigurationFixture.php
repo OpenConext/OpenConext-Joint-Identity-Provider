@@ -7,14 +7,24 @@ namespace JointIdentityProvider\Tests\Support;
 use JointIdentityProvider\Core\Configuration\ConfigurationLoader;
 use JointIdentityProvider\Core\Configuration\ConfigurationParser;
 use JointIdentityProvider\Core\Profile\ProfileRegistry;
+use JointIdentityProvider\Oidc\Cache\ProviderCache;
 use JointIdentityProvider\Oidc\Configuration\KeyPairReader;
 use JointIdentityProvider\Oidc\Configuration\OidcConfigurationParser;
+use JointIdentityProvider\Oidc\Http\ProviderHttpClient;
+use JointIdentityProvider\Oidc\Jose\SignedMessageVerifier;
+use JointIdentityProvider\Oidc\Keys\KeyResolver;
 use JointIdentityProvider\Profile\Dezi\DeziProfile;
+use JointIdentityProvider\Profile\Dezi\ProofValidator;
+use JointIdentityProvider\Profile\Dezi\RevocationChecker;
+use JointIdentityProvider\Profile\Dezi\UserInfoReader;
 use OpenSSLAsymmetricKey;
 use OpenSSLCertificate;
 use OpenSSLCertificateSigningRequest;
 use RuntimeException;
+use Symfony\Component\Clock\NativeClock;
 use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\HttpClient\MockHttpClient;
+use Symfony\Component\HttpClient\Response\MockResponse;
 use Symfony\Component\Yaml\Yaml;
 
 /**
@@ -94,11 +104,28 @@ final class ConfigurationFixture
     public static function loader(?string $configFile, ?string $deploymentEnvironment = 'mock'): ConfigurationLoader
     {
         $parser = new ConfigurationParser(
-            new ProfileRegistry([new DeziProfile()]),
+            new ProfileRegistry([self::deziProfile()]),
             new OidcConfigurationParser(new KeyPairReader(self::projectDir())),
         );
 
         return new ConfigurationLoader($parser, self::projectDir(), $configFile, $deploymentEnvironment);
+    }
+
+    /**
+     * A DEZI profile for configuration parsing; its outgoing requests reach no provider.
+     */
+    public static function deziProfile(): DeziProfile
+    {
+        $http = new ProviderHttpClient(new MockHttpClient(static fn (): MockResponse => new MockResponse('', ['http_code' => 404])));
+        $clock = new NativeClock();
+        $keys = new KeyResolver($http, new ProviderCache(sys_get_temp_dir() . '/jip-tests-unused-cache'), $clock);
+
+        return new DeziProfile(
+            new UserInfoReader($http),
+            new ProofValidator(new SignedMessageVerifier($keys)),
+            new RevocationChecker($http, $clock),
+            $clock,
+        );
     }
 
     public static function setEnv(string $name, ?string $value): void

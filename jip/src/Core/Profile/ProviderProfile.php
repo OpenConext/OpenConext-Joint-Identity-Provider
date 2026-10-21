@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace JointIdentityProvider\Core\Profile;
 
+use DateTimeImmutable;
 use JointIdentityProvider\Core\Configuration\ProviderConfiguration;
 use JointIdentityProvider\Core\Configuration\Reader\ConfigNode;
 use JointIdentityProvider\Oidc\AuthenticatedLogin;
@@ -66,4 +67,15 @@ interface ProviderProfile
      * §14). Makes no change to the transaction.
      */
     public function validateLogin(AuthenticatedLogin $login, ProviderConfiguration $provider): ProfileOutcome;
+
+    /**
+     * The profile's check when the result is delivered (design §2, §13). Makes at most one outgoing
+     * request, within ProfileConfiguration::deliveryRecheckTimeoutSeconds(), and never extends the hard
+     * expiry.
+     */
+    public function recheck(
+        ProfileResult $result,
+        ProviderConfiguration $provider,
+        DateTimeImmutable $now,
+    ): RecheckResult;
 }

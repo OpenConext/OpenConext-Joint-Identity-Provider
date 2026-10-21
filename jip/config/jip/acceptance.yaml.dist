@@ -6,7 +6,8 @@
 #
 # The DEZI placeholders stay until the CIBG gives a dated confirmation (design §10) of: the key address
 # per message type, the expected issuers, loa_authn and loa_dezi, the client ID, the client-authentication
-# method, the signing-key registration, max_age support and whether auth_time is always returned.
+# method, the signing-key registration, max_age support and whether auth_time is always returned, the envelope
+# claim that carries the statement, the envelope audience, the subject association and permitted null claims.
 environment: acceptance
 engineblock:
   api_token: '%env(EB_API_TOKEN)%'
@@ -30,6 +31,13 @@ provider:
   expected_assurance:
     loa_authn: '<confirmed>'
     loa_dezi: '<confirmed>'
+  envelope:                           # DEZI profile (§14), as the CIBG's example messages and contract confirm (§10)
+    statement_claim: '<confirmed envelope claim that carries the statement>'
+    subject_association: '<envelope_sub, or access_token only with a CIBG-approved contract>'
+    audiences:                        # one per client under provider.clients
+      ggd: '<confirmed envelope aud for this client registration>'
+  statement:
+    nullable_claims: []               # only optional claims whose null the CIBG confirms as absent (§16)
   clock_skew_seconds: 60
   key_cache_seconds: 3600
   key_refetch_min_interval_seconds: 60

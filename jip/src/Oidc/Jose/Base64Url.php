@@ -12,6 +12,19 @@ final class Base64Url
     }
 
     /**
+     * Strict base64url without padding; null for any other input.
+     */
+    public static function decode(string $encoded): ?string
+    {
+        if (preg_match('/^[A-Za-z0-9_-]*$/', $encoded) !== 1) {
+            return null;
+        }
+        $decoded = base64_decode(strtr($encoded, '-_', '+/'), true);
+
+        return $decoded === false ? null : $decoded;
+    }
+
+    /**
      * 256 random bits, base64url without padding: 43 characters.
      */
     public static function randomToken(): string

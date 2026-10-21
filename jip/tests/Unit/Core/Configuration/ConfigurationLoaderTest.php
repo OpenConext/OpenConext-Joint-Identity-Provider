@@ -73,11 +73,12 @@ final class ConfigurationLoaderTest extends TestCase
 
         $errors = self::errorsOf(static fn () => $loader->load());
 
-        self::assertCount(9, $errors, implode("\n", $errors));
+        self::assertCount(12, $errors, implode("\n", $errors));
         foreach ($errors as $error) {
             self::assertStringEndsWith(': is an unreplaced placeholder', $error);
         }
         self::assertContains('provider.approved_key_addresses.envelope: is an unreplaced placeholder', $errors);
+        self::assertContains('provider.envelope.subject_association: is an unreplaced placeholder', $errors);
         self::assertContains('transactions.store: is an unreplaced placeholder', $errors);
     }
 

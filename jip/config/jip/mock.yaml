@@ -28,6 +28,13 @@ provider:
   expected_assurance:                 # mock assumption: the v0.7 example values; DEZI's are open (§10, §16)
     loa_authn: 'http://eidas.europa.eu/LoA/high'
     loa_dezi: 'http://eidas.europe.eu/LoA/high'
+  envelope:                           # DEZI profile (§14); every value here is a mock assumption (§10)
+    statement_claim: 'verklaring'     # the envelope claim that carries the sealed statement
+    subject_association: access_token # as v0.7: no envelope sub; a supplied sub must still equal the ID token's
+    audiences:                        # per client under provider.clients; not assumed to be the client ID
+      ggd: 'jip-mock-ggd-envelope'
+  statement:
+    nullable_claims: [voorvoegsel]    # mock assumption: v0.7's example has voorvoegsel: null (§16)
   clock_skew_seconds: 60
   key_cache_seconds: 3600
   key_refetch_min_interval_seconds: 60
@@ -41,7 +48,6 @@ provider:
     ggd:
       client_id: 'jip-mock-ggd'       # mock assumption: the mock's client registration
       redirect_uri: 'https://jip.dev.openconext.local/oidc/callback'   # as registered at the mock
-      # Stage 6: expected envelope audience is jip-mock-ggd-envelope, distinct from client_id.
       authentication: private_key_jwt
       signing_key:
         certificate: 'keys/mock/ggd-signing.crt'

@@ -4,25 +4,33 @@ declare(strict_types=1);
 
 namespace JointIdentityProvider\Tests\Support;
 
+use DateTimeImmutable;
 use JointIdentityProvider\Core\Configuration\ProviderConfiguration;
 use JointIdentityProvider\Core\Configuration\Reader\ConfigNode;
 use JointIdentityProvider\Core\Profile\ProfileConfiguration;
 use JointIdentityProvider\Core\Profile\ProfileOutcome;
+use JointIdentityProvider\Core\Profile\ProfileResult;
 use JointIdentityProvider\Core\Profile\ProviderProfile;
+use JointIdentityProvider\Core\Profile\RecheckResult;
 use JointIdentityProvider\Core\Transaction\StoredProfileResult;
 use JointIdentityProvider\Oidc\AuthenticatedLogin;
 use JointIdentityProvider\Profile\Dezi\DeziProfile;
+use JointIdentityProvider\Tests\Support\ConfigurationFixture as Fixture;
 
 /**
- * A profile whose validation always passes; the core must still not mark success on its own.
+ * A profile whose validation passes with the given claims, so tests reach the core's own checks.
  */
 final readonly class VerifyingProfile implements ProviderProfile
 {
     private DeziProfile $dezi;
 
-    public function __construct()
-    {
-        $this->dezi = new DeziProfile();
+    /**
+     * @param array<string, list<string>> $claims
+     */
+    public function __construct(
+        private array $claims = ['dezi_nummer' => ['900000001'], 'abonnee_nummer' => ['90000001']],
+    ) {
+        $this->dezi = Fixture::deziProfile();
     }
 
     public function name(): string
@@ -58,9 +66,14 @@ final readonly class VerifyingProfile implements ProviderProfile
     public function validateLogin(AuthenticatedLogin $login, ProviderConfiguration $provider): ProfileOutcome
     {
         return ProfileOutcome::verified(new StoredProfileResult(
-            ['dezi_nummer' => ['900000001']],
+            $this->claims,
             $login->attemptStartedAt->modify('+300 seconds'),
             [],
         ));
+    }
+
+    public function recheck(ProfileResult $result, ProviderConfiguration $provider, DateTimeImmutable $now): RecheckResult
+    {
+        return RecheckResult::passed($result, $result, $result->hardExpiry());
     }
 }
