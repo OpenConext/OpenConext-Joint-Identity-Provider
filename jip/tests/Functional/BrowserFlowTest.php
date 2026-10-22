@@ -157,6 +157,7 @@ final class BrowserFlowTest extends WebTestCase
         $this->client->request('GET', self::JIP . '/interrupt?nonce=' . $id);
 
         self::assertResponseStatusCodeSame(403);
+        self::assertStringContainsString('JointIdentityProvider (JIP)', $this->bodyText());
         self::assertStringContainsString('organisation_refused', $this->bodyText());
         self::assertStringContainsString($this->stored($id)->logId, $this->bodyText());
         self::assertSame([], $this->links());

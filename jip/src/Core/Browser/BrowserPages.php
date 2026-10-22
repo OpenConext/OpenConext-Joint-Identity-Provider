@@ -72,7 +72,8 @@ final class BrowserPages
         ?string $failureType = null,
     ): Response {
         $html = '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>JIP: ' . self::e($title)
-            . '</title></head><body><h1>' . self::e($title) . '</h1><p>' . self::e($message) . '</p>';
+            . '</title></head><body><header><p><strong>JointIdentityProvider (JIP)</strong></p></header><h1>'
+            . self::e($title) . '</h1><p>' . self::e($message) . '</p>';
         if ($failureType !== null) {
             $html .= '<p>Reason: <code>' . self::e($failureType) . '</code></p>';
         }
