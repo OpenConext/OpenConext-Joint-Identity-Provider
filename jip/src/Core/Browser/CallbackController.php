@@ -6,6 +6,7 @@ namespace JointIdentityProvider\Core\Browser;
 
 use JointIdentityProvider\Core\Configuration\ConfigurationLoader;
 use JointIdentityProvider\Core\Configuration\JipConfiguration;
+use JointIdentityProvider\Core\EngineBlock\LogFields;
 use JointIdentityProvider\Core\EngineBlock\ReturnUrl;
 use JointIdentityProvider\Core\Profile\ProfileRegistry;
 use JointIdentityProvider\Core\Profile\ProfileResult;
@@ -67,6 +68,9 @@ final readonly class CallbackController
         }
 
         $now = $this->clock->now();
+        if ($transaction->state === TransactionState::Consumed) {
+            return $this->restartable(FailureType::AlreadyUsed, $transaction, $configuration);
+        }
         if ($transaction->isExpired($now)) {
             return $this->restartable(FailureType::Expired, $transaction, $configuration);
         }
@@ -84,20 +88,12 @@ final readonly class CallbackController
             $transaction->state !== TransactionState::AtProvider || $transaction->attempt === null
             || !is_string($cookie) || !hash_equals($transaction->attempt->cookieValue, $cookie)
         ) {
-            $this->logger->warning('JIP callback {log_id}: state or cookie does not match an attempt at the provider', [
-                'log_id' => $transaction->logId,
-            ]);
-
             return $this->restartable(FailureType::CallbackMismatch, $transaction, $configuration);
         }
 
         $validating = $transaction->validating();
         if (!$this->store->compareAndSet($transaction->id, TransactionState::AtProvider, $validating, $now)) {
-            $this->logger->warning('JIP callback {log_id}: the attempt is no longer at the provider', [
-                'log_id' => $transaction->logId,
-            ]);
-
-            return $this->restartable(FailureType::CallbackMismatch, $transaction, $configuration);
+            return $this->notUpdated($transaction, $configuration);
         }
 
         try {
@@ -168,7 +164,7 @@ final readonly class CallbackController
                     $configuration,
                     $outcome->failureType ?? FailureType::InternalError->value,
                     $outcome->restartable,
-                    $outcome->detail,
+                    $profile->name() . ' profile, ' . $outcome->detail,
                 );
             }
 
@@ -206,7 +202,7 @@ final readonly class CallbackController
 
         $now = $this->clock->now();
         if (!$this->store->compareAndSet($validating->id, TransactionState::Validating, $accepted, $now)) {
-            return $this->restartable(FailureType::Expired, $validating, $configuration);
+            return $this->notUpdated($validating, $configuration);
         }
 
         $this->logger->info('JIP callback {log_id}: succeeded, back to EngineBlock', ['log_id' => $validating->logId]);
@@ -260,14 +256,18 @@ final readonly class CallbackController
     ): Response {
         $failed = $validating->failed($failureType, $restartable);
         if (!$this->store->compareAndSet($validating->id, TransactionState::Validating, $failed, $this->clock->now())) {
-            return $this->restartable(FailureType::Expired, $validating, $configuration);
+            return $this->notUpdated($validating, $configuration);
         }
 
-        $this->logger->warning('JIP callback {log_id}: failed ({failure_type}: {detail})', [
-            'log_id' => $validating->logId,
-            'failure_type' => $failureType,
-            'detail' => $detail,
-        ]);
+        $this->logger->warning(
+            'JIP callback {log_id}: failed ({failure_type}: {detail}) for service {service}, organisation'
+            . ' {organisation}, policy version {policy_version} at start, EngineBlock request {eb_request_id}',
+            [
+                'log_id' => $validating->logId,
+                'failure_type' => $failureType,
+                'detail' => $detail,
+            ] + LogFields::correlation($validating),
+        );
 
         return BrowserPages::failure(
             $failureType,
@@ -278,8 +278,31 @@ final readonly class CallbackController
         );
     }
 
+    private function notUpdated(Transaction $transaction, JipConfiguration $configuration): Response
+    {
+        $current = $this->store->find($transaction->id) ?? $transaction;
+        $type = match (true) {
+            $current->state === TransactionState::Consumed => FailureType::AlreadyUsed,
+            $current->isExpired($this->clock->now()) => FailureType::Expired,
+            default => FailureType::CallbackMismatch,
+        };
+
+        return $this->restartable($type, $current, $configuration);
+    }
+
     private function restartable(FailureType $type, Transaction $transaction, JipConfiguration $configuration): Response
     {
+        $this->logger->warning(
+            'JIP callback {log_id}: refused ({failure_type}); transaction unchanged ({state})'
+            . ' for service {service}, organisation {organisation},'
+            . ' policy version {policy_version} at start, EngineBlock request {eb_request_id}',
+            [
+                'log_id' => $transaction->logId,
+                'failure_type' => $type->value,
+                'state' => $transaction->state->value,
+            ] + LogFields::correlation($transaction),
+        );
+
         return BrowserPages::failure(
             $type->value,
             $type->isRestartable(),

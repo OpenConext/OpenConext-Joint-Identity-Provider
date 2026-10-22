@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace JointIdentityProvider\Tests\Functional;
 
 use DateTimeImmutable;
+use JointIdentityProvider\Core\Logging\LineLogger;
 use JointIdentityProvider\Core\Profile\ProfileRegistry;
 use JointIdentityProvider\Core\Profile\ProviderProfile;
 use JointIdentityProvider\Core\Storage\SqliteTransactionStore;
@@ -14,12 +15,14 @@ use JointIdentityProvider\Core\Transaction\TransactionStore;
 use JointIdentityProvider\Tests\Support\ConfigurationFixture as Fixture;
 use JointIdentityProvider\Tests\Support\TestProvider;
 use JointIdentityProvider\Tests\Support\VerifyingProfile;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Stringable;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\BrowserKit\Cookie;
+use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\NativeClock;
 use Symfony\Component\Clock\Test\ClockSensitiveTrait;
 use Symfony\Component\Filesystem\Filesystem;
@@ -41,6 +44,8 @@ final class BrowserFlowTest extends WebTestCase
     private Fixture $fixture;
     private KernelBrowser $client;
     private TestProvider $provider;
+    /** @var list<string> */
+    private array $logLines = [];
 
     protected function setUp(): void
     {
@@ -203,6 +208,61 @@ final class BrowserFlowTest extends WebTestCase
         self::assertSame('userinfo_refused', $this->stored($id)->failureType);
     }
 
+    /**
+     * @return iterable<string, array{bool}>
+     */
+    public static function callbackReloads(): iterable
+    {
+        yield 'cookie cleared by success' => [false];
+        yield 'original cookie replayed' => [true];
+    }
+
+    #[DataProvider('callbackReloads')]
+    public function test_a_callback_reload_after_success_is_only_a_request_rejection(bool $restoreCookie): void
+    {
+        $this->recordLog();
+        self::getContainer()->set(ProfileRegistry::class, new ProfileRegistry([new VerifyingProfile()]));
+        $id = $this->start(['900000001']);
+        $query = $this->handOff($id);
+        $original = $this->stored($id);
+        $cookie = $this->cookie($original);
+        self::assertNotNull($cookie);
+        $this->returnFromProvider(['code' => 'the-code', 'state' => $query['state']]);
+        self::assertResponseStatusCodeSame(302);
+        $succeeded = $this->stored($id);
+        self::assertSame(TransactionState::Succeeded, $succeeded->state);
+        if ($restoreCookie) {
+            $this->client->getCookieJar()->set(new Cookie(
+                'jip_tx_' . $original->logId,
+                $cookie,
+                null,
+                '/oidc/callback',
+                'jip.dev.openconext.local',
+                true,
+            ));
+        }
+
+        $this->returnFromProvider(['code' => 'the-code', 'state' => $query['state']]);
+
+        self::assertResponseStatusCodeSame(400);
+        self::assertEquals($succeeded, $this->stored($id));
+        self::assertSame(1, $this->provider->countRequests([TestProvider::TOKEN]));
+        $this->assertCallbackRejections($succeeded, 1);
+    }
+
+    private function assertCallbackRejections(Transaction $transaction, int $count): void
+    {
+        $warnings = array_values(array_filter(
+            $this->logLines,
+            static fn (string $line): bool => str_starts_with($line, 'jip.WARNING:'),
+        ));
+        $expected = 'jip.WARNING: JIP callback ' . $transaction->logId
+            . ': refused (callback_mismatch); transaction unchanged (' . $transaction->state->value . ')'
+            . ' for service ' . Fixture::SERVICE . ', organisation http://mock-idp, policy version mock-1 at start,'
+            . ' EngineBlock request _8f3c';
+        self::assertSame(array_fill(0, $count, $expected), $warnings);
+    }
+
     public function test_a_cancel_at_the_provider_fails_the_transaction_with_a_restart_link(): void
     {
         $id = $this->start(['900000001']);
@@ -250,6 +310,7 @@ final class BrowserFlowTest extends WebTestCase
 
     public function test_a_missing_or_wrong_cookie_changes_no_transaction(): void
     {
+        $this->recordLog();
         $id = $this->start(['900000001']);
         $query = $this->handOff($id);
         $transaction = $this->stored($id);
@@ -260,6 +321,7 @@ final class BrowserFlowTest extends WebTestCase
         self::assertResponseStatusCodeSame(400);
         self::assertStringContainsString('callback_mismatch', $this->bodyText());
         self::assertSame([self::RESTART_URL], $this->links());
+        $this->assertCallbackRejections($transaction, 1);
 
         $jar->clear();
         $this->returnFromProvider(['code' => 'the-code', 'state' => $query['state']]);
@@ -267,6 +329,7 @@ final class BrowserFlowTest extends WebTestCase
 
         self::assertSame(TransactionState::AtProvider, $this->stored($id)->state);
         self::assertSame(0, $this->provider->countRequests([TestProvider::TOKEN]));
+        $this->assertCallbackRejections($transaction, 2);
     }
 
     public function test_two_tabs_do_not_interfere(): void
@@ -384,6 +447,7 @@ final class BrowserFlowTest extends WebTestCase
 
     public function test_an_expired_transaction_shows_a_restart_link_and_does_not_change(): void
     {
+        $this->recordLog();
         $id = $this->start(['900000001']);
         $query = $this->handOff($id);
         self::mockTime('+601 seconds');
@@ -394,6 +458,7 @@ final class BrowserFlowTest extends WebTestCase
         self::assertSame([self::RESTART_URL], $this->links());
         self::assertSame(0, $this->provider->countRequests([TestProvider::TOKEN]));
         self::assertSame(TransactionState::AtProvider, $this->stored($id)->state);
+        $this->assertExpiredLog('callback', $this->stored($id)->logId, TransactionState::AtProvider);
     }
 
     public function test_a_verified_profile_outcome_still_needs_the_account_binding(): void
@@ -542,7 +607,7 @@ final class BrowserFlowTest extends WebTestCase
         $logger->method('error')->willReturnCallback(static function (string|Stringable $message, array $context) use (&$errors): void {
             $errors[] = ['message' => (string) $message, 'context' => $context];
         });
-        self::getContainer()->set('logger', $logger);
+        self::getContainer()->set('jip.logger', $logger);
         $id = $this->start(['900000001']);
         $query = $this->handOff($id);
         $this->provider->answers[TestProvider::TOKEN] = static fn (): MockResponse => throw new RuntimeException(
@@ -565,6 +630,128 @@ final class BrowserFlowTest extends WebTestCase
             self::assertSame(['log_id' => $transaction->logId, 'exception_class' => RuntimeException::class], $error['context']);
             self::assertStringNotContainsString('secret-', $error['message']);
         }
+    }
+
+    /**
+     * @return iterable<string, array{list<string>}>
+     */
+    public static function expiredHandOffs(): iterable
+    {
+        yield 'pending login' => [['900000001']];
+        yield 'skipped login' => [[]];
+    }
+
+    /**
+     * @param list<string> $binding
+     */
+    #[DataProvider('expiredHandOffs')]
+    public function test_an_expired_hand_off_logs_its_outcome(array $binding): void
+    {
+        self::mockTime();
+        $this->recordLog();
+        $id = $this->start($binding);
+        $logId = $this->stored($id)->logId;
+        Clock::get()->sleep(601);
+
+        $this->client->request('GET', self::JIP . '/interrupt?nonce=' . $id);
+
+        self::assertResponseStatusCodeSame(400);
+        self::assertStringContainsString($logId, $this->bodyText());
+        self::assertStringContainsString('expired', $this->bodyText());
+        $this->assertExpiredLog('hand-off', $logId, $binding === [] ? TransactionState::Skipped : TransactionState::Pending);
+    }
+
+    /**
+     * @return iterable<string, array{TransactionState, bool}>
+     */
+    public static function expiredCallbackWrites(): iterable
+    {
+        yield 'claiming the callback' => [TransactionState::AtProvider, false];
+        yield 'recording success' => [TransactionState::Validating, false];
+        yield 'recording failure' => [TransactionState::Validating, true];
+    }
+
+    #[DataProvider('expiredCallbackWrites')]
+    public function test_expiry_during_a_callback_write_logs_the_outcome(TransactionState $expected, bool $cancel): void
+    {
+        self::mockTime();
+        $this->recordLog();
+        $this->expireAtWrite($expected);
+        self::getContainer()->set(ProfileRegistry::class, new ProfileRegistry([new VerifyingProfile()]));
+        $id = $this->start(['900000001']);
+        $query = $this->handOff($id);
+        $logId = $this->stored($id)->logId;
+
+        $this->returnFromProvider(['state' => $query['state']] + ($cancel
+            ? ['error' => 'access_denied']
+            : ['code' => 'the-code']));
+
+        self::assertResponseStatusCodeSame(400);
+        self::assertStringContainsString($logId, $this->bodyText());
+        self::assertStringContainsString('expired', $this->bodyText());
+        $this->assertExpiredLog('callback', $logId, $expected);
+    }
+
+    public function test_expiry_during_the_hand_off_write_logs_the_outcome(): void
+    {
+        self::mockTime();
+        $this->recordLog();
+        $this->expireAtWrite(TransactionState::Pending);
+        $id = $this->start(['900000001']);
+        $logId = $this->stored($id)->logId;
+
+        $this->client->request('GET', self::JIP . '/interrupt?nonce=' . $id);
+
+        self::assertResponseStatusCodeSame(400);
+        self::assertStringContainsString($logId, $this->bodyText());
+        self::assertStringContainsString('expired', $this->bodyText());
+        $this->assertExpiredLog('hand-off', $logId, TransactionState::Pending);
+    }
+
+    private function expireAtWrite(TransactionState $state): void
+    {
+        $store = new SqliteTransactionStore($this->fixture->storePath(), Clock::get());
+        $delayedStore = $this->createMock(TransactionStore::class);
+        $delayedStore->method('add')->willReturnCallback($store->add(...));
+        $delayedStore->method('find')->willReturnCallback($store->find(...));
+        $delayedStore->method('findByOidcState')->willReturnCallback($store->findByOidcState(...));
+        $delayedStore->method('compareAndSet')->willReturnCallback(static function (
+            string $id,
+            TransactionState $expected,
+            Transaction $replacement,
+            DateTimeImmutable $now,
+            ?DateTimeImmutable $validUntil = null,
+        ) use (
+            $store,
+            $state
+): bool {
+            if ($expected === $state) {
+                Clock::get()->sleep(601);
+            }
+
+            return $store->compareAndSet($id, $expected, $replacement, $now, $validUntil);
+        });
+        self::getContainer()->set(TransactionStore::class, $delayedStore);
+    }
+
+    private function recordLog(): void
+    {
+        self::getContainer()->set('jip.logger', new LineLogger('jip', 'info', function (string $line): void {
+            $this->logLines[] = $line;
+        }));
+    }
+
+    private function assertExpiredLog(string $stage, string $logId, TransactionState $state): void
+    {
+        $lines = array_values(array_filter(
+            $this->logLines,
+            static fn (string $line): bool => str_contains($line, ': refused (expired)'),
+        ));
+        self::assertSame([
+            'jip.WARNING: JIP ' . $stage . ' ' . $logId . ': refused (expired); transaction unchanged (' . $state->value . ')'
+            . ' for service ' . Fixture::SERVICE
+            . ', organisation http://mock-idp, policy version mock-1 at start, EngineBlock request _8f3c',
+        ], $lines);
     }
 
     /**

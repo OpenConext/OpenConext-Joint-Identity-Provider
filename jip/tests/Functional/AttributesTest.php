@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace JointIdentityProvider\Tests\Functional;
 
 use Closure;
+use JointIdentityProvider\Core\Logging\LineLogger;
 use JointIdentityProvider\Core\Storage\SqliteTransactionStore;
 use JointIdentityProvider\Core\Transaction\Transaction;
 use JointIdentityProvider\Core\Transaction\TransactionState;
@@ -36,6 +37,8 @@ final class AttributesTest extends WebTestCase
     private Fixture $fixture;
     private KernelBrowser $client;
     private TestProvider $provider;
+    /** @var list<string> */
+    private array $logLines = [];
 
     protected function setUp(): void
     {
@@ -89,6 +92,59 @@ final class AttributesTest extends WebTestCase
         self::assertSame(1, $this->statusRequests());
 
         self::assertSame([404, ['error' => 'not_found']], $this->deliver($id));
+    }
+
+    public function test_the_log_correlates_a_verified_login_without_live_values(): void
+    {
+        $this->recordLog();
+        $id = $this->complete();
+        $attempt = $this->stored($id)->attempt;
+        self::assertNotNull($attempt);
+
+        self::assertSame(200, $this->deliver($id)[0]);
+
+        self::assertNotSame([], $this->logLines);
+        foreach ($this->logLines as $line) {
+            self::assertMatchesRegularExpression('/^jip\.[A-Z]+: JIP /', $line);
+            foreach (
+                [
+                    $id,
+                    $attempt->oidcState,
+                    $attempt->oidcNonce,
+                    $attempt->pkceVerifier,
+                    $attempt->cookieValue,
+                    'the-code',
+                    Fixture::API_TOKEN,
+                    '900000001',
+                    '90000001',
+                    'jdoe',
+                ] as $secret
+            ) {
+                self::assertStringNotContainsString($secret, $line);
+            }
+        }
+        self::assertCount(1, $this->logLinesMatching(
+            '/^jip\.INFO: JIP start [0-9a-f]{16}: pending .* policy version mock-1, EngineBlock request _8f3c$/',
+        ));
+        self::assertCount(1, $this->logLinesMatching(
+            '/^jip\.INFO: JIP result [0-9a-f]{16}: delivered succeeded .* policy version mock-1 at start and'
+            . ' mock-1 at delivery, EngineBlock request _8f3c$/',
+        ));
+    }
+
+    public function test_a_failed_callback_logs_the_profile_detail_with_correlation(): void
+    {
+        $this->recordLog();
+        $this->provider->status = 'ingetrokken';
+        $id = $this->complete();
+
+        $logId = $this->stored($id)->logId;
+        self::assertContains(
+            'jip.WARNING: JIP callback ' . $logId . ': failed (statement_not_active: dezi profile, status check:'
+            . ' statement is not active) for service ' . Fixture::SERVICE . ', organisation http://mock-idp, policy'
+            . ' version mock-1 at start, EngineBlock request _8f3c',
+            $this->logLines,
+        );
     }
 
     /**
@@ -330,7 +386,9 @@ final class AttributesTest extends WebTestCase
 
     public function test_expiry_of_the_proof_during_the_recheck_releases_nothing(): void
     {
+        $this->recordLog();
         $id = $this->complete();
+        $logId = $this->stored($id)->logId;
         Clock::get()->sleep(61);
         // The envelope expires 300 seconds after it was issued.
         $this->provider->answers[$this->provider->statusUrl()] = static function (): MockResponse {
@@ -341,23 +399,87 @@ final class AttributesTest extends WebTestCase
 
         self::assertSame([404, ['error' => 'not_found']], $this->deliver($id));
         self::assertNotSame(TransactionState::Consumed, $this->storedOrNull($id)?->state);
+        $this->assertExpiredLog($logId, 'succeeded');
     }
 
     public function test_a_result_past_its_deadline_is_not_found_without_a_status_check(): void
     {
+        $this->recordLog();
         $id = $this->complete();
+        $logId = $this->stored($id)->logId;
         Clock::get()->sleep(301);
 
         self::assertSame([404, ['error' => 'not_found']], $this->deliver($id));
         self::assertSame(1, $this->statusRequests());
+        $this->assertExpiredLog($logId, 'succeeded');
     }
 
     public function test_a_skipped_result_past_the_transaction_deadline_is_not_found(): void
     {
+        $this->recordLog();
         $id = $this->start([]);
+        $logId = $this->stored($id)->logId;
         Clock::get()->sleep(600);
 
         self::assertSame(404, $this->deliver($id)[0]);
+        $this->assertExpiredLog($logId, 'skipped');
+    }
+
+    /**
+     * @return iterable<string, array{int}>
+     */
+    public static function consumedReplays(): iterable
+    {
+        yield 'before the deadline' => [0];
+        yield 'after the deadline' => [301];
+    }
+
+    #[DataProvider('consumedReplays')]
+    public function test_consumed_replays_are_logged_as_reuse_without_a_new_outcome(int $delay): void
+    {
+        $this->recordLog();
+        $id = $this->complete();
+        $attempt = $this->stored($id)->attempt;
+        self::assertNotNull($attempt);
+        self::assertSame(200, $this->deliver($id)[0]);
+        $consumed = $this->stored($id);
+        $before = count($this->logLines);
+        Clock::get()->sleep($delay);
+
+        self::assertSame([404, ['error' => 'not_found']], $this->deliver($id));
+        $this->client->request('GET', self::JIP . '/oidc/callback?' . http_build_query([
+            'state' => $attempt->oidcState,
+            'code' => 'the-code',
+        ]));
+        self::assertResponseStatusCodeSame(400);
+        self::assertStringContainsString('already_used', (string) $this->client->getResponse()->getContent());
+        $this->client->request('GET', self::JIP . '/interrupt?nonce=' . $id);
+        self::assertResponseStatusCodeSame(400);
+        self::assertStringContainsString('already_used', (string) $this->client->getResponse()->getContent());
+
+        self::assertEquals($consumed, $this->stored($id));
+        self::assertCount(1, $this->logLinesMatching('/JIP result .*: delivered succeeded /'));
+        self::assertSame([], $this->logLinesMatching('/: failed \(/'));
+        $rejections = array_slice($this->logLines, $before);
+        self::assertCount(3, $rejections);
+        foreach ($rejections as $line) {
+            self::assertStringContainsString($consumed->logId . ': refused (already_used); transaction unchanged (consumed)', $line);
+            self::assertStringContainsString('for service ' . Fixture::SERVICE . ', organisation http://mock-idp', $line);
+            self::assertStringContainsString('EngineBlock request _8f3c', $line);
+            self::assertStringNotContainsString('expired', $line);
+        }
+        self::assertSame(1, $this->provider->countRequests([TestProvider::TOKEN]));
+        self::assertSame(1, $this->statusRequests());
+    }
+
+    private function assertExpiredLog(string $logId, string $state): void
+    {
+        $lines = $this->logLinesMatching('/JIP result .*: refused \(expired\)/');
+        self::assertSame([
+            'jip.WARNING: JIP result ' . $logId . ': refused (expired); transaction unchanged (' . $state . ') for service ' . Fixture::SERVICE
+            . ', organisation http://mock-idp, policy version mock-1 at start and mock-1 at delivery,'
+            . ' EngineBlock request _8f3c',
+        ], $lines);
     }
 
     /**
@@ -464,6 +586,24 @@ final class AttributesTest extends WebTestCase
     private function statusRequests(): int
     {
         return $this->provider->countRequests([$this->provider->statusUrl()]);
+    }
+
+    private function recordLog(): void
+    {
+        self::getContainer()->set('jip.logger', new LineLogger('jip', 'info', function (string $line): void {
+            $this->logLines[] = $line;
+        }));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function logLinesMatching(string $pattern): array
+    {
+        return array_values(array_filter(
+            $this->logLines,
+            static fn (string $line): bool => preg_match($pattern, $line) === 1,
+        ));
     }
 
     private function stored(string $id): Transaction

@@ -46,15 +46,16 @@ final readonly class ResultDelivery
         JipConfiguration $configuration,
     ): DeliveryOutcome {
         $transaction = $this->store->find($transactionId);
-        if ($transaction === null || $transaction->isExpired($this->clock->now())) {
-            $this->logger->warning('JIP result: unknown or expired transaction');
+        if ($transaction === null) {
+            $this->logger->warning('JIP result: unknown transaction');
 
             return DeliveryOutcome::notFound();
         }
         if ($transaction->state === TransactionState::Consumed) {
-            $this->logger->warning('JIP result {log_id}: already consumed', ['log_id' => $transaction->logId]);
-
-            return DeliveryOutcome::notFound();
+            return $this->refuseUnchanged($transaction, FailureType::AlreadyUsed, $configuration);
+        }
+        if ($transaction->isExpired($this->clock->now())) {
+            return $this->refuseUnchanged($transaction, FailureType::Expired, $configuration);
         }
         if (!in_array($transaction->state, [TransactionState::Succeeded, TransactionState::Skipped], true)) {
             $this->logger->warning('JIP result {log_id}: not deliverable in state {state}', [
@@ -119,7 +120,7 @@ final readonly class ResultDelivery
 
         $this->logger->info(
             'JIP result {log_id}: delivered {outcome} for service {service}, organisation {organisation},'
-            . ' policy version {policy_version_start} at start and {policy_version_delivery} at delivery,'
+            . ' policy version {policy_version} at start and {policy_version_delivery} at delivery,'
             . ' EngineBlock request {eb_request_id}',
             [
                 'log_id' => $transaction->logId,
@@ -185,12 +186,12 @@ final readonly class ResultDelivery
                 $this->clock->now(),
             )
         ) {
-            return $this->lostRace($transaction);
+            return $this->lostRace($transaction, $configuration);
         }
 
         $this->logger->warning(
             'JIP result {log_id}: refused ({failure_type}) for service {service}, organisation {organisation},'
-            . ' policy version {policy_version_start} at start and {policy_version_delivery} at delivery,'
+            . ' policy version {policy_version} at start and {policy_version_delivery} at delivery,'
             . ' EngineBlock request {eb_request_id}',
             ['log_id' => $transaction->logId, 'failure_type' => $failureType]
             + self::context($transaction, $configuration),
@@ -219,16 +220,22 @@ final readonly class ResultDelivery
             return $this->fail($transaction, $type->value, $type->isRestartable(), $configuration);
         }
 
-        return $this->lostRace($transaction);
+        return $this->lostRace($transaction, $configuration);
     }
 
     /**
      * Another call changed the transaction, or it expired.
      */
-    private function lostRace(Transaction $transaction): DeliveryOutcome
+    private function lostRace(Transaction $transaction, JipConfiguration $configuration): DeliveryOutcome
     {
         $current = $this->store->find($transaction->id);
         $now = $this->clock->now();
+        if ($current?->state === TransactionState::Consumed) {
+            return $this->refuseUnchanged($current, FailureType::AlreadyUsed, $configuration);
+        }
+        if ($transaction->isExpired($now) || ($current !== null && $current->isExpired($now))) {
+            return $this->refuseUnchanged($current ?? $transaction, FailureType::Expired, $configuration);
+        }
         $this->logger->warning('JIP result {log_id}: not consumed; the transaction changed or expired', [
             'log_id' => $transaction->logId,
         ]);
@@ -238,18 +245,31 @@ final readonly class ResultDelivery
             : DeliveryOutcome::forbidden();
     }
 
+    private function refuseUnchanged(
+        Transaction $transaction,
+        FailureType $type,
+        JipConfiguration $configuration,
+    ): DeliveryOutcome {
+        $this->logger->warning(
+            'JIP result {log_id}: refused ({failure_type}); transaction unchanged ({state})'
+            . ' for service {service}, organisation {organisation},'
+            . ' policy version {policy_version} at start and {policy_version_delivery} at delivery,'
+            . ' EngineBlock request {eb_request_id}',
+            ['log_id' => $transaction->logId, 'failure_type' => $type->value, 'state' => $transaction->state->value]
+            + self::context($transaction, $configuration),
+        );
+
+        return DeliveryOutcome::notFound();
+    }
+
     /**
      * @return array<string, string>
      */
     private static function context(Transaction $transaction, JipConfiguration $configuration): array
     {
         return [
-            'service' => LogFields::entityId($transaction->serviceId),
-            'organisation' => LogFields::entityId($transaction->organisationId),
-            'policy_version_start' => $transaction->connectionPolicyVersionAtStart,
             'policy_version_delivery' => ($configuration->services[$transaction->serviceId] ?? null)
                 ->connectionPolicyVersion ?? '-',
-            'eb_request_id' => LogFields::engineBlockRequestId($transaction->returnUrl),
-        ];
+        ] + LogFields::correlation($transaction);
     }
 }

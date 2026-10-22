@@ -6,6 +6,7 @@ namespace JointIdentityProvider\Core\Browser;
 
 use JointIdentityProvider\Core\Configuration\ConfigurationLoader;
 use JointIdentityProvider\Core\Configuration\JipConfiguration;
+use JointIdentityProvider\Core\EngineBlock\LogFields;
 use JointIdentityProvider\Core\EngineBlock\ReturnUrl;
 use JointIdentityProvider\Core\Transaction\FailureType;
 use JointIdentityProvider\Core\Transaction\ProviderAttempt;
@@ -114,7 +115,11 @@ final readonly class InterruptController
         if (!$this->store->compareAndSet($transaction->id, TransactionState::Pending, $atProvider, $now)) {
             $current = $this->store->find($transaction->id);
 
-            return $current === null ? BrowserPages::unknown() : $this->stateFor($current, $configuration);
+            if ($current === null && !$transaction->isExpired($this->clock->now())) {
+                return BrowserPages::unknown();
+            }
+
+            return $this->stateFor($current ?? $transaction, $configuration);
         }
 
         $this->logger->info('JIP hand-off {log_id}: to the provider', ['log_id' => $transaction->logId]);
@@ -151,32 +156,37 @@ final readonly class InterruptController
     {
         $restartUrl = ($configuration->services[$transaction->serviceId] ?? null)?->restartLoginUrl;
 
-        if ($transaction->isExpired($this->clock->now())) {
+        if ($transaction->state === TransactionState::Consumed || $transaction->isExpired($this->clock->now())) {
+            $type = $transaction->state === TransactionState::Consumed
+                ? FailureType::AlreadyUsed
+                : FailureType::Expired;
+            $this->logger->warning(
+                'JIP hand-off {log_id}: refused ({failure_type}); transaction unchanged ({state})'
+                . ' for service {service}, organisation {organisation},'
+                . ' policy version {policy_version} at start, EngineBlock request {eb_request_id}',
+                [
+                    'log_id' => $transaction->logId,
+                    'failure_type' => $type->value,
+                    'state' => $transaction->state->value,
+                ] + LogFields::correlation($transaction),
+            );
+
             return BrowserPages::failure(
-                FailureType::Expired->value,
-                FailureType::Expired->isRestartable(),
+                $type->value,
+                $type->isRestartable(),
                 $transaction,
                 $restartUrl,
                 Response::HTTP_BAD_REQUEST,
             );
         }
 
-        return match ($transaction->state) {
-            TransactionState::AtProvider, TransactionState::Validating, TransactionState::Succeeded,
-            TransactionState::Pending, TransactionState::Skipped => BrowserPages::inProgress($transaction),
-            TransactionState::Failed => BrowserPages::failure(
+        return $transaction->state === TransactionState::Failed
+            ? BrowserPages::failure(
                 $transaction->failureType ?? TransactionState::Failed->value,
                 $transaction->failureRestartable,
                 $transaction,
                 $restartUrl,
-            ),
-            TransactionState::Consumed => BrowserPages::failure(
-                FailureType::AlreadyUsed->value,
-                FailureType::AlreadyUsed->isRestartable(),
-                $transaction,
-                $restartUrl,
-                Response::HTTP_BAD_REQUEST,
-            ),
-        };
+            )
+            : BrowserPages::inProgress($transaction);
     }
 }

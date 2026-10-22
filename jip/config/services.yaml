@@ -2,20 +2,37 @@ services:
     _defaults:
         autowire: true
         autoconfigure: true
+        bind:
+            Psr\Log\LoggerInterface $logger: '@jip.logger'
 
     JointIdentityProvider\:
         resource: '../src/'
         exclude:
             - '../src/Kernel.php'
+            - '../src/Core/Logging/'
             - '../src/Core/Transaction/'
             - '../src/Core/Storage/SqliteTransactionStore.php'
 
     JointIdentityProvider\Core\Transaction\TransactionStore:
         factory: ['@JointIdentityProvider\Core\Storage\TransactionStoreFactory', 'create']
 
+    # JIP's application log (design §20): info and above, also without debug mode.
+    jip.logger:
+        class: JointIdentityProvider\Core\Logging\LineLogger
+        arguments: ['jip', 'info']
+
+    # Symfony's own messages (router, HTTP client, uncaught errors): their info lines name request and provider
+    # URLs, so only warnings and errors are kept.
+    logger:
+        class: JointIdentityProvider\Core\Logging\LineLogger
+        arguments: ['jip.framework', 'warning']
+
 when@test:
     services:
         logger:
             class: Psr\Log\NullLogger
+        jip.logger:
+            class: Psr\Log\NullLogger
+            public: true
         JointIdentityProvider\Tests\Support\TestProvider:
             public: true

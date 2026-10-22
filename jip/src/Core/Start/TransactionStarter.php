@@ -138,11 +138,7 @@ final readonly class TransactionStarter
                 'log_id' => $transaction->logId,
                 'state' => $transaction->state->value,
                 'failure_type' => $transaction->failureType === null ? '' : ' (' . $transaction->failureType . ')',
-                'service' => $transaction->serviceId,
-                'organisation' => LogFields::entityId($transaction->organisationId),
-                'policy_version' => $transaction->connectionPolicyVersionAtStart,
-                'eb_request_id' => LogFields::engineBlockRequestId($transaction->returnUrl),
-            ],
+            ] + LogFields::correlation($transaction),
         );
     }
 }
