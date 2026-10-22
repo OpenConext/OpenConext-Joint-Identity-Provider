@@ -266,7 +266,6 @@ probe() { # <from service> <url>
 }
 probe engine https://jip.dev.openconext.local/health
 probe jip https://mock-dezi.dev.openconext.local/.well-known/openid-configuration
-probe jip-test-sp https://engine.dev.openconext.local/authentication/idp/metadata
 
 printf '\nSummary: %d FAIL, %d MISSING\n' "$fails" "$missing"
 [[ $fails -eq 0 ]]

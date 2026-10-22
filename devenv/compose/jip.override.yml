@@ -14,7 +14,7 @@ services:
           - mock-dezi.dev.openconext.local
           - jip-test-sp.dev.openconext.local
 
-  # Host port 3306 is taken on this machine; EngineBlock reaches MariaDB over the compose network.
+  # Publish MariaDB on a configurable host port; EngineBlock uses the Compose network.
   mariadb:
     ports: !override
       - 127.0.0.1:${DEVCONF_MARIADB_HOST_PORT:-13306}:3306
@@ -30,7 +30,7 @@ services:
     image: ghcr.io/openconext/openconext-manage/manage-server:${MANAGE_VERSION:-9.7.2}
 
   # The three POC applications use EngineBlock's development base image. JIP's custom entrypoint
-  # imports the dev CA; the test SP uses the base entrypoint. The mock makes no outgoing calls.
+  # imports the dev CA; the test SP starts Apache directly. The mock makes no outgoing calls.
   jip:
     image: ghcr.io/openconext/openconext-basecontainers/${JIP_PHP_IMAGE:-php85-apache2-node24:latest}
     profiles: ["jip"]
@@ -90,15 +90,28 @@ services:
       coreconextdev:
     hostname: mock-dezi.docker
 
+  # The test SP (design §7, §18): EngineBlock's only SP for the DEZI flow in this POC. It makes no outgoing calls; it
+  # trusts EngineBlock's signing certificate from devconf, mounted read-only.
   jip-test-sp:
+    # Skip the base entrypoint: the SP has no Symfony cache and needs no checkout permission changes.
+    entrypoint: []
+    command: ["apache2-foreground"]
     image: ghcr.io/openconext/openconext-basecontainers/${JIP_PHP_IMAGE:-php85-apache2-node24:latest}
     profiles: ["jip"]
     volumes:
       - ${JIP_TEST_SP_CODE_PATH}:/var/www/html
-      - ${DEVCONF_CORE_DIR}/haproxy/haproxy.crt:/config/haproxy/haproxy.crt:ro
+      - ${JIP_DEVENV_DIR}/test-sp/appconf.conf:/etc/apache2/sites-enabled/appconf.conf:ro
+      - ${DEVCONF_CORE_DIR}/engine/engineblock.crt:/etc/jip-test-sp/engineblock.crt:ro
     environment:
-      - APP_ENV=${JIP_APP_ENV:-dev}
-      - APP_DEBUG=${JIP_APP_DEBUG:-true}
+      - HTTPD_CSP=
+      - TEST_SP_IDP_CERTIFICATE_FILE=/etc/jip-test-sp/engineblock.crt
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "-s", "http://localhost/health"]
+      start_period: 30s
+      start_interval: 1s
+      interval: 10s
+      timeout: 2s
+      retries: 20
     networks:
       coreconextdev:
     hostname: jip-test-sp.docker
