@@ -1,0 +1,41 @@
+{
+  "version": 0,
+  "type": "saml20_sp",
+  "data": {
+    "entityid": "https://jip-test-sp.dev.openconext.local/saml/metadata",
+    "state": "prodaccepted",
+    "allowedall": false,
+    "allowedEntities": [
+      { "name": "http://mock-idp" }
+    ],
+    "arp": {
+      "enabled": true,
+      "attributes": {
+        "urn:mace:dir:attribute-def:uid": [
+          { "value": "*", "source": "idp", "motivation": "JIP POC: shown on the test SP's result page" }
+        ],
+        "urn:mace:dir:attribute-def:displayName": [
+          { "value": "*", "source": "idp", "motivation": "JIP POC: shown on the test SP's result page" }
+        ],
+        "urn:mace:dir:attribute-def:mail": [
+          { "value": "*", "source": "idp", "motivation": "JIP POC: shown on the test SP's result page" }
+        ],
+        "urn:mace:terena.org:attribute-def:schacHomeOrganization": [
+          { "value": "*", "source": "idp", "motivation": "JIP POC: shown on the test SP's result page" }
+        ]
+      }
+    },
+    "metaDataFields": {
+      "name:en": "JIP POC test SP",
+      "name:nl": "JIP POC test SP",
+      "description:en": "JointIdentityProvider (JIP) proof of concept: test SP for the DEZI flow",
+      "OrganizationName:en": "OpenConext DEV",
+      "AssertionConsumerService:0:Binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST",
+      "AssertionConsumerService:0:Location": "https://jip-test-sp.dev.openconext.local/saml/acs",
+      "NameIDFormat": "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified",
+      "coin:signature_method": "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256",
+      "coin:collab_enabled": true
+    },
+    "revisionnote": "JIP POC: direct SBS-enabled route to JIP (design §8, §17)"
+  }
+}
