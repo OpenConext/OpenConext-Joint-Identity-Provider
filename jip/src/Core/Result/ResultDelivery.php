@@ -32,6 +32,10 @@ final readonly class ResultDelivery
     public const string VERIFIED = 'verified';
     public const string SKIPPED = 'skipped';
 
+    private const string CORRELATION_SUFFIX =
+        ' policy version {policy_version} at start and {policy_version_delivery} at delivery,'
+        . ' EngineBlock request {eb_request_id}';
+
     public function __construct(
         private ConfigurationLoader $loader,
         private TransactionStore $store,
@@ -120,8 +124,7 @@ final readonly class ResultDelivery
 
         $this->logger->info(
             'JIP result {log_id}: delivered {outcome} for service {service}, organisation {organisation},'
-            . ' policy version {policy_version} at start and {policy_version_delivery} at delivery,'
-            . ' EngineBlock request {eb_request_id}',
+            . self::CORRELATION_SUFFIX,
             [
                 'log_id' => $transaction->logId,
                 'outcome' => $transaction->state->value,
@@ -191,8 +194,7 @@ final readonly class ResultDelivery
 
         $this->logger->warning(
             'JIP result {log_id}: refused ({failure_type}) for service {service}, organisation {organisation},'
-            . ' policy version {policy_version} at start and {policy_version_delivery} at delivery,'
-            . ' EngineBlock request {eb_request_id}',
+            . self::CORRELATION_SUFFIX,
             ['log_id' => $transaction->logId, 'failure_type' => $failureType]
             + self::context($transaction, $configuration),
         );
@@ -240,7 +242,7 @@ final readonly class ResultDelivery
             'log_id' => $transaction->logId,
         ]);
 
-        return $current === null || $current->isExpired($now) || $current->state === TransactionState::Consumed
+        return $current === null
             ? DeliveryOutcome::notFound()
             : DeliveryOutcome::forbidden();
     }
@@ -253,8 +255,7 @@ final readonly class ResultDelivery
         $this->logger->warning(
             'JIP result {log_id}: refused ({failure_type}); transaction unchanged ({state})'
             . ' for service {service}, organisation {organisation},'
-            . ' policy version {policy_version} at start and {policy_version_delivery} at delivery,'
-            . ' EngineBlock request {eb_request_id}',
+            . self::CORRELATION_SUFFIX,
             ['log_id' => $transaction->logId, 'failure_type' => $type->value, 'state' => $transaction->state->value]
             + self::context($transaction, $configuration),
         );

@@ -398,7 +398,7 @@ final class AttributesTest extends WebTestCase
         };
 
         self::assertSame([404, ['error' => 'not_found']], $this->deliver($id));
-        self::assertNotSame(TransactionState::Consumed, $this->storedOrNull($id)?->state);
+        self::assertNull($this->storedOrNull($id));
         $this->assertExpiredLog($logId, 'succeeded');
     }
 
