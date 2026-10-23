@@ -106,7 +106,7 @@ final class ApplicationTest extends TestCase
         self::assertSame('Internal error', $body);
         $log = file_get_contents($this->directory . '/error.log');
         self::assertIsString($log);
-        self::assertStringContainsString('internal error (InvalidArgumentException)', $log);
+        self::assertStringContainsString('internal error (InvalidArgumentException) at ApplicationTest.php:', $log);
         self::assertStringNotContainsString('secret-saml-content', $log);
     }
 
@@ -161,6 +161,28 @@ final class ApplicationTest extends TestCase
         self::assertSame(400, http_response_code());
     }
 
+    /** @return iterable<string, array{string, string}> */
+    public static function multiValueResponses(): iterable
+    {
+        yield 'verified and skipped' => ['both-flags', 'the login flag has more than one value'];
+        yield 'two role codes' => ['two-roles', 'the role code is malformed or has more than one value'];
+    }
+
+    #[DataProvider('multiValueResponses')]
+    public function testSignedMultiValueAttributesAreRefused(string $mode, string $reason): void
+    {
+        $this->request('GET', '/login');
+        $_POST['SAMLResponse'] = base64_encode($this->response($mode));
+        $this->request('POST', '/saml/acs');
+
+        self::assertSame(303, http_response_code());
+        $result = $_SESSION['result'];
+        self::assertIsArray($result);
+        self::assertSame('refused', $result['access']);
+        self::assertSame($reason, $result['reason']);
+        self::assertArrayNotHasKey('pending_request_id', $_SESSION);
+    }
+
     public function testResponseWithoutPendingLoginIsRefused(): void
     {
         $_POST['SAMLResponse'] = 'not-a-response';
@@ -175,6 +197,7 @@ final class ApplicationTest extends TestCase
     public static function invalidResponses(): iterable
     {
         yield 'malformed XML' => ['malformed'];
+        yield 'DOCTYPE' => ['doctype'];
         yield 'wrong request' => ['wrong-request'];
         yield 'expired assertion' => ['expired'];
         yield 'unsigned assertion' => ['unsigned'];
@@ -245,9 +268,18 @@ final class ApplicationTest extends TestCase
             'dezi:rol-code' => '01.000',
             'organisation' => '&lt;Organisation&gt;',
         ];
+        if ($mode === 'both-flags') {
+            $values['dezi:login'] = ['verified', 'skipped'];
+        }
+        if ($mode === 'two-roles') {
+            $values['dezi:rol-code'] = ['01.000', '00.000'];
+        }
         foreach ($values as $name => $value) {
-            $attributes .= '<saml:Attribute Name="urn:mace:govroam.nl:attribute-def:' . $name . '">'
-                . '<saml:AttributeValue>' . $value . '</saml:AttributeValue></saml:Attribute>';
+            $attributes .= '<saml:Attribute Name="urn:mace:govroam.nl:attribute-def:' . $name . '">';
+            foreach ((array) $value as $item) {
+                $attributes .= '<saml:AttributeValue>' . $item . '</saml:AttributeValue>';
+            }
+            $attributes .= '</saml:Attribute>';
         }
         $assertion = <<<XML
             <saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_assertion" Version="2.0" IssueInstant="$now">
@@ -284,7 +316,7 @@ final class ApplicationTest extends TestCase
             $assertion = str_replace('900000001', '900000099', $assertion);
         }
 
-        return <<<XML
+        return ($mode === 'doctype' ? '<!DOCTYPE samlp:Response>' : '') . <<<XML
             <samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"
                 ID="_response" Version="2.0" IssueInstant="$now" Destination="$acs" InResponseTo="$request">
               <saml:Issuer>$issuer</saml:Issuer>

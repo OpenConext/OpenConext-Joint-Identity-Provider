@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace JointIdentityProvider\TestSp;
 
+use Exception;
 use InvalidArgumentException;
 use OneLogin\Saml2\Auth;
-use OneLogin\Saml2\Error;
-use OneLogin\Saml2\ValidationError;
 use Throwable;
 
 /**
@@ -106,7 +105,7 @@ final readonly class Application
         $auth = new Auth($this->configuration->saml);
         try {
             $auth->processResponse($requestId);
-        } catch (Error | ValidationError $exception) {
+        } catch (Exception $exception) {
             Log::info(sprintf('response for request %s refused (%s)', Log::samlId($requestId), $exception::class));
             Page::send(400, 'Response not accepted', '<p>The SAML response could not be processed.</p>'
                 . '<p><a href="/login">Log in again</a></p>');
@@ -249,7 +248,12 @@ final readonly class Application
 
     public static function failSafe(Throwable $exception): void
     {
-        Log::info(sprintf('internal error (%s)', $exception::class));
+        Log::info(sprintf(
+            'internal error (%s) at %s:%d',
+            $exception::class,
+            basename($exception->getFile()),
+            $exception->getLine(),
+        ));
         self::text(500, 'Internal error');
     }
 }
