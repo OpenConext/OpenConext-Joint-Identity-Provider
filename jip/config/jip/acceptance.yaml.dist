@@ -12,7 +12,7 @@ environment: acceptance
 engineblock:
   api_token: '%env(EB_API_TOKEN)%'
   call_timeout_seconds: 10            # EngineBlock's http_client.timeout on every EngineBlock node (§17 check 20)
-  return_url_prefix: 'https://engine.govconext.example/authentication/idp/process-sraminterrupt'
+  return_url_prefix: '<approved EngineBlock return URL prefix>'
 provider:
   profile: dezi
   issuer: 'https://acceptatie.auth.dezi.nl'
@@ -50,7 +50,7 @@ provider:
   clients:
     ggd:
       client_id: '<from DEZI registration>'
-      redirect_uri: 'https://jip.govconext.example/oidc/callback'   # the return address registered with the CIBG (§10)
+      redirect_uri: '<registered JIP redirect URI>'   # the return address registered with the CIBG (§10)
       authentication: private_key_jwt # or none, only when the CIBG confirms DEZI wants no client authentication (§14)
       signing_key:
         certificate: '/etc/jip/keys/ggd-signing-2026.crt'
@@ -80,9 +80,9 @@ transactions:
   lifetime_seconds: 600
   store: '<shared store with atomic operations>'
 services:
-  'https://app.ggd.example.nl/saml/metadata':
+  '<approved service entity ID>':
     client: ggd
     connection_policy_version: '<approved version>'
-    allowed_organisations: ['https://idp.ggd.example.nl/saml/metadata']
+    allowed_organisations: ['<approved organisation entity ID>']
     release: [dezi_nummer, abonnee_nummer, rol_code]
     restart_login_url: '<approved by the application owner>'

@@ -107,9 +107,9 @@ final class ConfigurationLoaderTest extends TestCase
 
         $errors = self::errorsOf(static fn () => $loader->load());
 
-        self::assertCount(12, $errors, implode("\n", $errors));
+        self::assertCount(16, $errors, implode("\n", $errors));
         foreach ($errors as $error) {
-            self::assertStringEndsWith(': is an unreplaced placeholder', $error);
+            self::assertMatchesRegularExpression('/(?:is an unreplaced placeholder|has an unreplaced placeholder as its key)\z/', $error);
         }
         self::assertContains('provider.approved_key_addresses.envelope: is an unreplaced placeholder', $errors);
         self::assertContains('provider.envelope.subject_association: is an unreplaced placeholder', $errors);
@@ -120,7 +120,14 @@ final class ConfigurationLoaderTest extends TestCase
     {
         $template = Yaml::parseFile(Fixture::projectDir() . '/config/jip/acceptance.yaml.dist');
         self::assertIsArray($template);
+        self::assertIsArray($template['services']);
+        $service = $template['services']['<approved service entity ID>'];
+        unset($template['services']['<approved service entity ID>']);
+        $template['services']['https://app.ggd.example.nl/saml/metadata'] = $service;
         $changes = [
+            [['engineblock', 'return_url_prefix'], 'https://engine.example/authentication/idp/process-sraminterrupt'],
+            [['provider', 'clients', 'ggd', 'redirect_uri'], 'https://jip.example/oidc/callback'],
+            [['services', 'https://app.ggd.example.nl/saml/metadata', 'allowed_organisations'], ['https://idp.example/metadata']],
             [['provider', 'approved_key_addresses', 'envelope'], 'https://acceptatie.auth.dezi.nl/envelope/jwks'],
             [['provider', 'expected_issuers', 'envelope'], 'acceptance-envelope'],
             [['provider', 'expected_issuers', 'statement'], 'acceptance-statement'],
