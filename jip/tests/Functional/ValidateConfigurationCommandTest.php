@@ -39,6 +39,21 @@ final class ValidateConfigurationCommandTest extends KernelTestCase
         self::assertStringContainsString('environment mock, profile dezi', $tester->getDisplay(true));
     }
 
+    public function test_an_expired_certificate_warns_without_failing_the_startup_command(): void
+    {
+        $base = $this->fixture->writeKeyPair('expired', days: 0);
+        $configuration = ConfigurationFixture::with(
+            $this->fixture->mockConfiguration(),
+            ['provider', 'clients', 'ggd', 'signing_key'],
+            ['certificate' => $base . '.crt', 'private_key' => $base . '.pem', 'assertion_lifetime_seconds' => 60],
+        );
+        ConfigurationFixture::setEnv('JIP_CONFIG_FILE', $this->fixture->writeConfiguration($configuration));
+        $tester = $this->tester();
+
+        self::assertSame(Command::SUCCESS, $tester->execute([]));
+        self::assertStringContainsString('certificate has expired', $tester->getDisplay(true));
+    }
+
     public function test_an_invalid_configuration_lists_every_problem_and_fails(): void
     {
         $configuration = ConfigurationFixture::with(

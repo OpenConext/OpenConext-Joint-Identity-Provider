@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-// Consumes one skipped transaction at a shared start time; prints "consumed" or "refused".
-// Usage: consume-worker.php <database path> <transaction id> <start time as microtime float>
+// Consumes one skipped transaction after a parent-controlled barrier; prints "consumed" or "refused".
+// Usage: consume-worker.php <database path> <transaction id>
 
 use JointIdentityProvider\Core\Storage\SqliteTransactionStore;
 use JointIdentityProvider\Core\Transaction\Transaction;
@@ -13,11 +13,11 @@ use Symfony\Component\Clock\NativeClock;
 require dirname(__DIR__, 3) . '/vendor/autoload.php';
 
 $arguments = $_SERVER['argv'] ?? null;
-if (!is_array($arguments) || count($arguments) !== 4) {
+if (!is_array($arguments) || count($arguments) !== 3) {
     fwrite(STDERR, "usage\n");
     exit(2);
 }
-[, $path, $id, $startAt] = array_map(static fn (mixed $value): string => is_string($value) ? $value : '', $arguments);
+[, $path, $id] = array_map(static fn (mixed $value): string => is_string($value) ? $value : '', $arguments);
 
 $store = new SqliteTransactionStore($path, new NativeClock());
 $current = $store->find($id) ?? throw new RuntimeException('no transaction');
@@ -35,8 +35,10 @@ $consumed = new Transaction(
     resultDeadline: $current->resultDeadline,
 );
 
-while (microtime(true) < (float) $startAt) {
-    usleep(100);
+fwrite(STDOUT, "ready\n");
+fflush(STDOUT);
+if (fgets(STDIN) !== "go\n") {
+    exit(1);
 }
 
 echo $store->compareAndSet($id, TransactionState::Skipped, $consumed, new DateTimeImmutable()) ? 'consumed' : 'refused';

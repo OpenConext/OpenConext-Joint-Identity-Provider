@@ -275,37 +275,81 @@ final class SqliteTransactionStoreTest extends TestCase
         self::assertTrue($store->compareAndSet('t1', TransactionState::Pending, self::with($transaction, TransactionState::AtProvider), self::at('+1 second')));
     }
 
-    public function test_a_replacement_must_keep_the_start_fields_and_must_not_extend_the_deadline(): void
+    /** @return iterable<string, array{string}> */
+    public static function changedStartFields(): iterable
+    {
+        foreach (
+            ['logId', 'serviceId', 'organisationId', 'userId', 'connectionPolicyVersionAtStart',
+            'organisationBindingValue', 'returnUrl', 'transactionDeadline'] as $field
+        ) {
+            yield $field => [$field];
+        }
+    }
+
+    #[DataProvider('changedStartFields')]
+    public function test_a_replacement_must_keep_each_start_field(string $field): void
     {
         $store = $this->store();
         $transaction = self::transaction('t1', TransactionState::Skipped);
         $store->add($transaction);
-        $now = self::at('+1 second');
-
-        $changedOrganisation = new Transaction(
-            't1',
-            'log-t1',
-            $transaction->serviceId,
-            'https://other-idp.example/metadata',
-            $transaction->userId,
-            $transaction->connectionPolicyVersionAtStart,
-            '',
-            $transaction->returnUrl,
-            $transaction->transactionDeadline,
+        $replacement = new Transaction(
+            $transaction->id,
+            $field === 'logId' ? 'changed' : $transaction->logId,
+            $field === 'serviceId' ? 'changed' : $transaction->serviceId,
+            $field === 'organisationId' ? 'changed' : $transaction->organisationId,
+            $field === 'userId' ? 'changed' : $transaction->userId,
+            $field === 'connectionPolicyVersionAtStart' ? 'changed' : $transaction->connectionPolicyVersionAtStart,
+            $field === 'organisationBindingValue' ? 'changed' : $transaction->organisationBindingValue,
+            $field === 'returnUrl' ? 'changed' : $transaction->returnUrl,
+            $field === 'transactionDeadline' ? self::at('+601 seconds') : $transaction->transactionDeadline,
             TransactionState::Consumed,
             resultDeadline: $transaction->resultDeadline,
         );
-        $extended = self::with($transaction, TransactionState::Consumed, resultDeadline: self::at('+601 seconds'));
-
-        foreach ([$changedOrganisation, $extended] as $replacement) {
-            try {
-                $store->compareAndSet('t1', TransactionState::Skipped, $replacement, $now);
-                self::fail('The replacement must be refused.');
-            } catch (InvalidArgumentException) {
-            }
+        try {
+            $store->compareAndSet('t1', TransactionState::Skipped, $replacement, self::at('+1 second'));
+            self::fail('The replacement must preserve ' . $field);
+        } catch (InvalidArgumentException) {
         }
+        self::assertEquals($transaction, $store->find('t1'));
+    }
 
-        self::assertSame(TransactionState::Skipped, $store->find('t1')?->state);
+    /** @return iterable<string, array{int, bool}> */
+    public static function extendedResultDeadlines(): iterable
+    {
+        yield 'beyond the assigned result deadline, within the transaction deadline' => [400, true];
+        yield 'first result deadline beyond the transaction deadline' => [601, false];
+    }
+
+    #[DataProvider('extendedResultDeadlines')]
+    public function test_a_replacement_cannot_extend_the_result_deadline(int $seconds, bool $assigned): void
+    {
+        $store = $this->store();
+        $pending = self::transaction('t1', TransactionState::Pending);
+        $store->add($pending);
+        $now = self::at('+1 second');
+        $attempt = new ProviderAttempt('state', 'nonce', 'verifier', 'cookie', $now);
+        $atProvider = $pending->atProvider($attempt);
+        self::assertTrue($store->compareAndSet('t1', TransactionState::Pending, $atProvider, $now));
+        $validating = $atProvider->validating();
+        self::assertTrue($store->compareAndSet('t1', TransactionState::AtProvider, $validating, $now));
+        $result = new StoredProfileResult(['dezi_nummer' => ['123456789']], self::at('+300 seconds'), []);
+        $transaction = $validating;
+        if ($assigned) {
+            $transaction = $validating->succeeded($result, self::at('+300 seconds'));
+            self::assertTrue($store->compareAndSet('t1', TransactionState::Validating, $transaction, $now));
+        }
+        $replacement = self::with(
+            $transaction,
+            $assigned ? TransactionState::Consumed : TransactionState::Succeeded,
+            result: $assigned ? null : $result,
+            resultDeadline: self::at('+' . $seconds . ' seconds')
+        );
+        try {
+            $store->compareAndSet('t1', $transaction->state, $replacement, self::at('+1 second'));
+            self::fail('The result deadline must not be extended.');
+        } catch (InvalidArgumentException) {
+        }
+        self::assertEquals($transaction, $store->find('t1'));
     }
 
     public function test_the_replacement_must_carry_the_same_id(): void
@@ -378,21 +422,30 @@ final class SqliteTransactionStoreTest extends TestCase
         $store->add(self::transaction('race', TransactionState::Skipped, start: 'now'));
 
         $workers = [];
-        $startAt = microtime(true) + 0.5;
         for ($i = 0; $i < 8; $i++) {
             $process = proc_open(
-                [PHP_BINARY, dirname(__DIR__, 3) . '/Support/bin/consume-worker.php', $this->path(), 'race', (string) $startAt],
-                [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+                [PHP_BINARY, dirname(__DIR__, 3) . '/Support/bin/consume-worker.php', $this->path(), 'race'],
+                [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
                 $pipes,
             );
             self::assertIsResource($process);
             $workers[] = [$process, $pipes];
         }
 
+        // Every worker has loaded the same record before any may attempt consumption.
+        foreach ($workers as [, $pipes]) {
+            self::assertSame("ready\n", fgets($pipes[1]));
+        }
+        foreach ($workers as [, $pipes]) {
+            fwrite($pipes[0], "go\n");
+            fclose($pipes[0]);
+        }
         $outcomes = [];
         foreach ($workers as [$process, $pipes]) {
             $outcomes[] = trim((string) stream_get_contents($pipes[1])) . trim((string) stream_get_contents($pipes[2]));
-            proc_close($process);
+            fclose($pipes[1]);
+            fclose($pipes[2]);
+            self::assertSame(0, proc_close($process));
         }
 
         sort($outcomes);

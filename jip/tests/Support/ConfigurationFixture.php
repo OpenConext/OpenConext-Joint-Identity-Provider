@@ -41,6 +41,9 @@ final class ConfigurationFixture
     /** @var array<string, array{string, string}> generated certificate and key PEMs, reused across tests */
     private static array $generated = [];
 
+    /** @var array<string, array{array<string, mixed>, array<string, mixed>, string|false}> */
+    private static array $previousEnvironment = [];
+
     public function __construct()
     {
         $this->directory = sys_get_temp_dir() . '/jip-tests-' . bin2hex(random_bytes(6));
@@ -56,6 +59,9 @@ final class ConfigurationFixture
 
     public function remove(): void
     {
+        foreach (array_keys(self::$previousEnvironment) as $name) {
+            self::setEnv($name, null);
+        }
         (new Filesystem())->remove($this->directory);
     }
 
@@ -131,12 +137,22 @@ final class ConfigurationFixture
     public static function setEnv(string $name, ?string $value): void
     {
         if ($value === null) {
-            unset($_SERVER[$name], $_ENV[$name]);
-            putenv($name);
+            if (isset(self::$previousEnvironment[$name])) {
+                [$server, $environment, $process] = self::$previousEnvironment[$name];
+                unset($_SERVER[$name], $_ENV[$name], self::$previousEnvironment[$name]);
+                $_SERVER += $server;
+                $_ENV += $environment;
+                putenv($process === false ? $name : $name . '=' . $process);
+            }
 
             return;
         }
 
+        self::$previousEnvironment[$name] ??= [
+            array_intersect_key($_SERVER, [$name => true]),
+            array_intersect_key($_ENV, [$name => true]),
+            getenv($name),
+        ];
         $_SERVER[$name] = $value;
         $_ENV[$name] = $value;
     }

@@ -43,6 +43,39 @@ final class ConfigurationLoaderTest extends TestCase
         $this->fixture->remove();
     }
 
+    public function test_environment_overrides_restore_each_original_source(): void
+    {
+        $name = 'JIP_TEST_ENV_RESTORE';
+        $server = array_intersect_key($_SERVER, [$name => true]);
+        $environment = array_intersect_key($_ENV, [$name => true]);
+        $process = getenv($name);
+        try {
+            $_SERVER[$name] = 'original-server';
+            $_ENV[$name] = 'original-env';
+            putenv($name . '=original-process');
+            Fixture::setEnv($name, 'first');
+            Fixture::setEnv($name, 'second');
+            Fixture::setEnv($name, null);
+            self::assertSame('original-server', $_SERVER[$name]);
+            self::assertSame('original-env', $_ENV[$name]);
+            self::assertSame('original-process', getenv($name));
+
+            unset($_SERVER[$name], $_ENV[$name]);
+            putenv($name);
+            Fixture::setEnv($name, 'temporary');
+            Fixture::setEnv($name, null);
+            self::assertArrayNotHasKey($name, $_SERVER);
+            self::assertArrayNotHasKey($name, $_ENV);
+            self::assertFalse(getenv($name));
+        } finally {
+            Fixture::setEnv($name, null);
+            unset($_SERVER[$name], $_ENV[$name]);
+            $_SERVER += $server;
+            $_ENV += $environment;
+            putenv($process === false ? $name : $name . '=' . $process);
+        }
+    }
+
     public function test_the_committed_mock_configuration_passes(): void
     {
         $configuration = $this->load($this->fixture->mockConfiguration());
@@ -523,6 +556,11 @@ final class ConfigurationLoaderTest extends TestCase
             Fixture::ABSENT,
             'provider.clients.ggd.signing_key: is required with private_key_jwt',
         ];
+        yield 'unreadable signing private key' => [
+            [...self::SIGNING_KEY_PATH, 'private_key'],
+            static fn (Fixture $f): string => $f->directory . '/absent.pem',
+            'provider.clients.ggd.signing_key.private_key: names a file that cannot be read',
+        ];
         yield 'signing private key that does not match its certificate' => [
             [...self::SIGNING_KEY_PATH, 'private_key'],
             static fn (Fixture $f): string => $f->writeKeyPair('other') . '.pem',
@@ -725,7 +763,11 @@ final class ConfigurationLoaderTest extends TestCase
             [['provider', 'revocation', 'status_address'], 'https://mock-dezi.dev.openconext.local/'],
         ]);
 
-        self::assertCount(3, self::errorsOf(fn () => $this->load($configuration)));
+        self::assertEqualsCanonicalizing([
+            'engineblock.api_token: must be at least 32 characters',
+            'binding.claim: is not a binding claim that profile dezi allows',
+            'provider.revocation.status_address: must contain {verklaring_id} exactly once',
+        ], self::errorsOf(fn () => $this->load($configuration)));
     }
 
     /**

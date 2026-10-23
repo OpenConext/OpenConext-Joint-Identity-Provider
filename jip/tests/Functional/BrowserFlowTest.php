@@ -120,7 +120,10 @@ final class BrowserFlowTest extends WebTestCase
         self::assertStringContainsString('secure', $setCookie);
         self::assertStringContainsString('httponly', $setCookie);
         self::assertStringContainsString('samesite=lax', $setCookie);
-        self::assertStringContainsString('expires=', $setCookie);
+        self::assertSame(
+            $transaction->transactionDeadline->getTimestamp(),
+            $this->client->getResponse()->headers->getCookies()[0]->getExpiresTime(),
+        );
         self::assertSame($transaction->attempt?->cookieValue, $this->cookie($transaction));
     }
 
@@ -192,6 +195,26 @@ final class BrowserFlowTest extends WebTestCase
         self::assertSame($transaction->attempt?->pkceVerifier, $form['code_verifier']);
         self::assertArrayHasKey('client_assertion', $form);
         self::assertNull($this->cookie($transaction), 'The callback removes the transaction cookie.');
+    }
+
+    public function test_an_old_callback_after_restart_leaves_the_new_transaction_and_cookie_untouched(): void
+    {
+        $oldId = $this->start(['900000001']);
+        $oldQuery = $this->handOff($oldId);
+        $this->returnFromProvider(['error' => 'access_denied', 'state' => $oldQuery['state']]);
+        $old = $this->stored($oldId);
+        $newId = $this->start(['900000001']);
+        $this->handOff($newId);
+        $new = $this->stored($newId);
+        $cookie = $this->cookie($new);
+        self::assertNotNull($cookie);
+
+        $this->returnFromProvider(['code' => 'old-code', 'state' => $oldQuery['state']]);
+
+        self::assertEquals($old, $this->stored($oldId));
+        self::assertEquals($new, $this->stored($newId));
+        self::assertSame($cookie, $this->cookie($new));
+        self::assertSame(0, $this->provider->countRequests([TestProvider::TOKEN]));
     }
 
     public function test_a_hand_off_cache_failure_has_a_log_id_and_secure_error_page(): void
@@ -313,6 +336,8 @@ final class BrowserFlowTest extends WebTestCase
         $this->returnFromProvider(['error' => 'server_error', 'state' => $query['state'], 'code' => 'ignored']);
 
         self::assertSame('provider_error', $this->stored($id)->failureType);
+        self::assertTrue($this->stored($id)->failureRestartable);
+        self::assertSame([self::RESTART_URL], $this->links());
         self::assertSame(0, $this->provider->countRequests([TestProvider::TOKEN]));
     }
 

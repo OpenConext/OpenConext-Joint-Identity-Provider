@@ -319,7 +319,7 @@ final class AttributesTest extends WebTestCase
     }
 
     #[DataProvider('decisionAges')]
-    public function test_an_aged_decision_is_renewed_with_one_request(int $age, int $statusRequests): void
+    public function test_a_decision_is_renewed_only_when_its_validity_requires_it(int $age, int $statusRequests): void
     {
         $id = $this->complete();
         Clock::get()->sleep($age);

@@ -173,6 +173,9 @@ final class DeziProfileTest extends TestCase
         yield 'exp passed' => [static function (TestProvider $p): void {
             $p->envelopeClaims = ['exp' => (int) $p->now];
         }, 'envelope_invalid'];
+        yield 'nbf beyond the clock skew' => [static function (TestProvider $p): void {
+            $p->envelopeClaims = ['nbf' => (int) $p->now + 61];
+        }, 'envelope_invalid'];
         yield 'iat beyond the clock skew' => [static function (TestProvider $p): void {
             $p->envelopeClaims = ['iat' => (int) $p->now + 61];
         }, 'envelope_invalid'];
@@ -239,6 +242,17 @@ final class DeziProfileTest extends TestCase
             $p->statementHeader = ['kid' => TestProvider::KID];
             $p->statementSigningKey = TestProvider::KID;
         }, 'unknown_key'];
+    }
+
+    public function test_clock_skew_allows_future_iat_and_nbf_at_the_boundary(): void
+    {
+        $this->provider->envelopeClaims = [
+            'iat' => (int) $this->provider->now + 60,
+            'nbf' => (int) $this->provider->now + 60,
+        ];
+        $this->provider->statementClaims = ['nbf' => (int) $this->provider->now + 60];
+
+        $this->verified($this->validate());
     }
 
     public function test_a_verklaring_id_that_is_not_a_uuid_is_refused(): void
