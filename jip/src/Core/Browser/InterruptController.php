@@ -11,6 +11,7 @@ use JointIdentityProvider\Core\EngineBlock\ReturnUrl;
 use JointIdentityProvider\Core\Transaction\FailureType;
 use JointIdentityProvider\Core\Transaction\ProviderAttempt;
 use JointIdentityProvider\Core\Transaction\Transaction;
+use JointIdentityProvider\Core\Transaction\TransactionId;
 use JointIdentityProvider\Core\Transaction\TransactionState;
 use JointIdentityProvider\Core\Transaction\TransactionStore;
 use JointIdentityProvider\Oidc\Jose\Base64Url;
@@ -45,7 +46,7 @@ final readonly class InterruptController
         $configuration = $this->loader->load();
 
         $nonce = $request->query->all()['nonce'] ?? null;
-        if (!is_string($nonce) || !Base64Url::isRandomToken($nonce)) {
+        if (!is_string($nonce) || !TransactionId::isValid($nonce)) {
             return BrowserPages::unknown();
         }
 

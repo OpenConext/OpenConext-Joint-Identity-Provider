@@ -10,6 +10,7 @@ use JointIdentityProvider\Core\EngineBlock\LogFields;
 use JointIdentityProvider\Core\EngineBlock\ReturnUrl;
 use JointIdentityProvider\Core\Transaction\FailureType;
 use JointIdentityProvider\Core\Transaction\Transaction;
+use JointIdentityProvider\Core\Transaction\TransactionId;
 use JointIdentityProvider\Core\Transaction\TransactionState;
 use JointIdentityProvider\Core\Transaction\TransactionStore;
 use Psr\Clock\ClockInterface;
@@ -22,7 +23,6 @@ use Throwable;
 final readonly class TransactionStarter
 {
     private const int MAX_ADD_ATTEMPTS = 3;
-    private const string TRANSACTION_ID = '/^[A-Za-z0-9_-]{43}\z/';
     private const string LOG_ID = '/^[0-9a-f]{16}\z/';
 
     public function __construct(
@@ -52,7 +52,7 @@ final readonly class TransactionStarter
         for ($attempt = 0; $attempt < self::MAX_ADD_ATTEMPTS; $attempt++) {
             $id = $this->identifiers->transactionId();
             $logId = $this->identifiers->logId();
-            if (preg_match(self::TRANSACTION_ID, $id) !== 1 || preg_match(self::LOG_ID, $logId) !== 1) {
+            if (!TransactionId::isValid($id) || preg_match(self::LOG_ID, $logId) !== 1) {
                 return $this->refuse(StartOutcome::NOT_CREATED, $request);
             }
 

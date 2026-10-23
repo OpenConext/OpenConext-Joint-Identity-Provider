@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace JointIdentityProvider\Core\Start;
 
+use JointIdentityProvider\Core\Transaction\TransactionId;
+
 final class RandomIdentifierGenerator implements IdentifierGenerator
 {
     public function transactionId(): string
     {
-        return rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
+        return TransactionId::generate();
     }
 
     public function logId(): string

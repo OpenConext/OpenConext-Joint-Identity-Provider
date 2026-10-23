@@ -7,7 +7,7 @@ namespace JointIdentityProvider\Core\EngineBlock;
 use JointIdentityProvider\Core\Configuration\ConfigurationLoader;
 use JointIdentityProvider\Core\Result\DeliveryOutcome;
 use JointIdentityProvider\Core\Result\ResultDelivery;
-use JointIdentityProvider\Oidc\Jose\Base64Url;
+use JointIdentityProvider\Core\Transaction\TransactionId;
 use JsonException;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -45,7 +45,7 @@ final readonly class AttributesController
         }
 
         $nonce = is_array($data) ? ($data['nonce'] ?? null) : null;
-        if (!is_string($nonce) || !Base64Url::isRandomToken($nonce)) {
+        if (!is_string($nonce) || !TransactionId::isValid($nonce)) {
             return self::error('not_found', Response::HTTP_NOT_FOUND);
         }
 
