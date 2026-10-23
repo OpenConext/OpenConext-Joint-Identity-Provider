@@ -81,6 +81,7 @@ final class BrowserFlowTest extends WebTestCase
 
         $response = $this->client->getResponse();
         self::assertSame(302, $response->getStatusCode());
+        self::assertResponseHeaderSame('Strict-Transport-Security', 'max-age=31536000');
         self::assertStringStartsWith(TestProvider::AUTHORIZE . '?', (string) $response->headers->get('Location'));
         self::assertSame('no-referrer', $response->headers->get('Referrer-Policy'));
         self::assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
@@ -115,7 +116,7 @@ final class BrowserFlowTest extends WebTestCase
 
         $transaction = $this->stored($id);
         $setCookie = (string) $this->client->getResponse()->headers->get('Set-Cookie');
-        self::assertStringStartsWith('jip_tx_' . $transaction->logId . '=', $setCookie);
+        self::assertStringStartsWith('__Secure-jip_tx_' . $transaction->logId . '=', $setCookie);
         self::assertStringContainsString('path=/oidc/callback', $setCookie);
         self::assertStringContainsString('secure', $setCookie);
         self::assertStringContainsString('httponly', $setCookie);
@@ -245,7 +246,7 @@ final class BrowserFlowTest extends WebTestCase
         $cookie = $this->cookie($this->stored($id));
         $this->returnFromProvider(['code' => 'the-code', 'state' => $query['state']]);
 
-        $this->client->getCookieJar()->set(new Cookie('jip_tx_' . $this->stored($id)->logId, (string) $cookie, null, '/oidc/callback', 'jip.dev.openconext.local', true));
+        $this->client->getCookieJar()->set(new Cookie('__Secure-jip_tx_' . $this->stored($id)->logId, (string) $cookie, null, '/oidc/callback', 'jip.dev.openconext.local', true));
         $this->returnFromProvider(['code' => 'the-code', 'state' => $query['state']]);
 
         self::assertResponseStatusCodeSame(403);
@@ -278,7 +279,7 @@ final class BrowserFlowTest extends WebTestCase
         self::assertSame(TransactionState::Succeeded, $succeeded->state);
         if ($restoreCookie) {
             $this->client->getCookieJar()->set(new Cookie(
-                'jip_tx_' . $original->logId,
+                '__Secure-jip_tx_' . $original->logId,
                 $cookie,
                 null,
                 '/oidc/callback',
@@ -363,9 +364,10 @@ final class BrowserFlowTest extends WebTestCase
         $transaction = $this->stored($id);
         $jar = $this->client->getCookieJar();
 
-        $jar->set(new Cookie('jip_tx_' . $transaction->logId, 'wrong', null, '/oidc/callback', 'jip.dev.openconext.local', true));
+        $jar->set(new Cookie('__Secure-jip_tx_' . $transaction->logId, 'wrong', null, '/oidc/callback', 'jip.dev.openconext.local', true));
         $this->returnFromProvider(['code' => 'the-code', 'state' => $query['state']]);
         self::assertResponseStatusCodeSame(400);
+        self::assertResponseHeaderSame('Strict-Transport-Security', 'max-age=31536000');
         self::assertStringContainsString('callback_mismatch', $this->bodyText());
         self::assertSame([self::RESTART_URL], $this->links());
         $this->assertCallbackRejections($transaction, 1);
@@ -405,7 +407,7 @@ final class BrowserFlowTest extends WebTestCase
         $second = $this->start(['900000001']);
         $this->handOff($second);
         $jar = $this->client->getCookieJar();
-        $jar->expire('jip_tx_' . $this->stored($first)->logId, '/oidc/callback', 'jip.dev.openconext.local');
+        $jar->expire('__Secure-jip_tx_' . $this->stored($first)->logId, '/oidc/callback', 'jip.dev.openconext.local');
 
         $this->returnFromProvider(['code' => 'the-code', 'state' => $firstQuery['state']]);
 
@@ -873,7 +875,7 @@ final class BrowserFlowTest extends WebTestCase
     private function cookie(Transaction $transaction): ?string
     {
         return $this->client->getCookieJar()
-            ->get('jip_tx_' . $transaction->logId, '/oidc/callback', 'jip.dev.openconext.local')
+            ->get('__Secure-jip_tx_' . $transaction->logId, '/oidc/callback', 'jip.dev.openconext.local')
             ?->getValue();
     }
 

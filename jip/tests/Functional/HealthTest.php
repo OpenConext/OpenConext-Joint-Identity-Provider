@@ -34,6 +34,7 @@ final class HealthTest extends WebTestCase
         $client->request('GET', '/health');
 
         self::assertResponseStatusCodeSame(200);
+        self::assertResponseHeaderSame('Strict-Transport-Security', 'max-age=31536000');
         self::assertResponseHeaderSame('Content-Type', 'application/json');
         self::assertResponseHeaderSame('Cache-Control', 'no-store, private');
         self::assertSame('{"status":"UP","certificates":"ok"}', $client->getResponse()->getContent());
@@ -52,6 +53,7 @@ final class HealthTest extends WebTestCase
         $client->request('GET', '/health');
 
         self::assertResponseStatusCodeSame(503);
+        self::assertResponseHeaderSame('Strict-Transport-Security', 'max-age=31536000');
         self::assertSame('{"status":"DOWN"}', $client->getResponse()->getContent());
     }
 
@@ -63,6 +65,7 @@ final class HealthTest extends WebTestCase
         $client->request('GET', '/health');
 
         self::assertResponseStatusCodeSame(503);
+        self::assertResponseHeaderSame('Strict-Transport-Security', 'max-age=31536000');
     }
 
     public function test_health_accepts_get_only(): void
@@ -73,5 +76,6 @@ final class HealthTest extends WebTestCase
         $client->request('POST', '/health');
 
         self::assertResponseStatusCodeSame(405);
+        self::assertResponseHeaderSame('Strict-Transport-Security', 'max-age=31536000');
     }
 }

@@ -16,7 +16,7 @@ use Symfony\Component\HttpFoundation\Cookie;
  */
 final class TransactionCookie
 {
-    private const string PREFIX = 'jip_tx_';
+    private const string PREFIX = '__Secure-jip_tx_';
 
     public static function name(Transaction $transaction): string
     {
