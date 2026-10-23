@@ -21,8 +21,8 @@ final readonly class ProviderHttpClient
     }
 
     /**
-     * @param array<string, string> $headers replace the default headers of the same name
-     * @param int|null $timeoutSeconds a shorter limit than TIMEOUT_SECONDS for this request
+     * @param array<string, string> $headers replace default headers; Accept-Encoding is always identity
+     * @param int|null $timeoutSeconds the limit for this request; TIMEOUT_SECONDS when omitted
      * @throws NoAnswer
      */
     public function get(string $url, array $headers = [], ?int $timeoutSeconds = null): ProviderResponse
@@ -40,13 +40,21 @@ final readonly class ProviderHttpClient
     }
 
     /**
-     * @param array<string, mixed> $options
+     * @param array{headers?: array<string, string>, body?: array<string, string>} $options
      */
     private function send(string $method, string $url, array $options, ?int $timeoutSeconds): ProviderResponse
     {
-        $timeout = min($timeoutSeconds ?? self::TIMEOUT_SECONDS, self::TIMEOUT_SECONDS);
+        $timeout = $timeoutSeconds ?? self::TIMEOUT_SECONDS;
+        // An explicit encoding disables Symfony's automatic decompression. Keep the size limit on
+        // the bytes we consume, and reject a provider that sends an encoded body anyway.
+        $options['headers'] ??= ['Accept' => 'application/json'];
+        foreach (array_keys($options['headers']) as $name) {
+            if (strcasecmp($name, 'Accept-Encoding') === 0) {
+                unset($options['headers'][$name]);
+            }
+        }
+        $options['headers']['Accept-Encoding'] = 'identity';
         $options += [
-            'headers' => ['Accept' => 'application/json'],
             'max_redirects' => 0,
             'timeout' => $timeout,
             'max_duration' => $timeout,
@@ -61,6 +69,12 @@ final readonly class ProviderHttpClient
         try {
             $response = $this->httpClient->request($method, $url, $options);
             $status = $response->getStatusCode();
+            foreach ($response->getHeaders(false)['content-encoding'] ?? [] as $encoding) {
+                if (strtolower(trim($encoding)) !== 'identity') {
+                    $response->cancel();
+                    throw new NoAnswer('The provider answered with an encoded body.');
+                }
+            }
             $body = $response->getContent(false);
         } catch (ExceptionInterface $exception) {
             throw new NoAnswer('The request got no answer.', 0, $exception);
