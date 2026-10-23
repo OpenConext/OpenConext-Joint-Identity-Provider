@@ -141,7 +141,7 @@ afterwards with §5):
 ## 7. Repeatable verification
 
 ```bash
-APP_ENV=test composer --working-dir=jip check     # lint, phpcs, phpstan max, phpunit
+APP_ENV=test composer --working-dir=jip check     # lint, phpcs, phpstan max, phpunit, dependency audit
 composer --working-dir=mock-dezi check
 composer --working-dir=test-sp check
 jip/vendor/bin/phpunit --no-configuration devenv/tests/ManagePushTest.php
