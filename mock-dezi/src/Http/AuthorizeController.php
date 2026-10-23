@@ -83,8 +83,14 @@ final readonly class AuthorizeController
             if ($session !== null && $maxAge !== null && $now - $session->authTime > $maxAge) {
                 $session = null;
             }
-            if ($session === null && in_array('none', $prompts, true)) {
-                return 'login_required';
+            if (in_array('none', $prompts, true)) {
+                if ($session === null) {
+                    return 'login_required';
+                }
+                $person = $this->fixtures->person($session->personId);
+                if ($person === null || count($person->profiles) !== 1) {
+                    return 'account_selection_required';
+                }
             }
             $authorization = new AuthorizationRequest(
                 id: Jose::randomToken(),
@@ -107,10 +113,10 @@ final readonly class AuthorizeController
             return $stored->authorizationRequests[$authorization->id] = $authorization;
         });
 
-        if ($outcome === 'login_required') {
+        if (is_string($outcome)) {
             return Responses::redirectTo($redirectUri, [
-                'error' => 'login_required',
-                'error_description' => 'prompt=none and no usable mock DEZI session',
+                'error' => $outcome,
+                'error_description' => 'prompt=none cannot be completed without interaction',
                 'state' => $state,
             ]);
         }

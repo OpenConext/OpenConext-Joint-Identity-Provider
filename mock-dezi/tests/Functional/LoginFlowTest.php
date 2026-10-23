@@ -192,6 +192,20 @@ final class LoginFlowTest extends MockDeziTestCase
         self::assertSame($firstAuthTime, JipSimulator::payload($second['id_token'])['auth_time']);
     }
 
+    public function test_prompt_none_with_several_profiles_requires_account_selection(): void
+    {
+        $id = JipSimulator::requestId($this->jip->authorize());
+        $this->jip->login($id, 'bram');
+        $this->jip->chooseProfile($id, 'bram-ggd-zuid');
+
+        $response = $this->jip->authorize(['prompt' => 'none', 'max_age' => null]);
+
+        self::assertSame(302, $response->getStatusCode());
+        $callback = JipSimulator::callback($response);
+        self::assertSame('account_selection_required', $callback['error']);
+        self::assertSame($this->jip->state, $callback['state']);
+    }
+
     public function test_prompt_none_without_a_session_answers_login_required(): void
     {
         $callback = JipSimulator::callback($this->jip->authorize(['prompt' => 'none', 'max_age' => null]));
