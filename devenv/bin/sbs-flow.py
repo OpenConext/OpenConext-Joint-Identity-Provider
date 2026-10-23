@@ -20,6 +20,7 @@ import argparse
 import concurrent.futures
 import pathlib
 import secrets
+import signal
 import sys
 import time
 import urllib.parse
@@ -387,6 +388,8 @@ CASES = {
 
 
 def main():
+    # Unwind the policy-restoration finally block when GNU timeout sends SIGTERM.
+    signal.signal(signal.SIGTERM, lambda _signum, _frame: sys.exit(143))
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
     sub.add_parser('list')

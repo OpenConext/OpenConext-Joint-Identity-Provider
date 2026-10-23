@@ -12,7 +12,7 @@
 #
 # Requires the running stack and persisted Mujina accounts (devenv/README.md). Resets the mock DEZI
 # provider's state and clears JIP's provider cache (public metadata and keys only). Changes nothing in
-# Manage or EngineBlock. `--quick` skips the case that edits jip/config/jip/mock.yaml.
+# Manage or EngineBlock. `--quick` skips sbs-flow.py's withdrawal and renewal cases.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -28,6 +28,10 @@ mock() { # METHOD PATH [JSON]
     [[ -z "${body}" ]] && body='{}'
     curl -sS -o /dev/null --fail --cacert "${CA}" -X "$1" -H 'Content-Type: application/json' -d "${body}" "${MOCK}$2"
 }
+
+trap 'mock POST /mock/reset >/dev/null 2>&1 || true' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 clear_provider_cache() {
     docker exec -u www-data -w /var/www/html "${JIP_CONTAINER}" sh -c 'rm -rf "var/cache/${APP_ENV}/jip-provider"'
@@ -76,6 +80,7 @@ while read -r name expect restart; do
     [[ -z "${name}" || "${name}" == \#* ]] && continue
     scenario "${name}" "${expect}" "${restart}"
 done <<'EOF'
+cancel                              jip-error:provider_cancelled             yes
 success                             dezi                                     -
 authorize_error                     jip-error:provider_error                 yes
 callback_wrong_state                jip-error:link_not_valid                 no

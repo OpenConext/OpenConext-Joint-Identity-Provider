@@ -148,7 +148,7 @@ jip/vendor/bin/phpunit --no-configuration devenv/tests/ManagePushTest.php
 bash devenv/tests/haproxy-logging.sh
 devenv/bin/check.sh
 php devenv/bin/manage.php audit
-devenv/bin/verify-poc.sh                          # running stack; --quick skips the slow and config-editing cases
+devenv/bin/verify-poc.sh                          # running stack; --quick skips sbs-flow.py's withdrawal and renewal cases
 ```
 
 `verify-poc.sh` runs every browser login and mock DEZI scenario with its expected outcome and restart
