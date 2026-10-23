@@ -44,7 +44,7 @@ else
     miss "EngineBlock checkout (${ENGINE_CODE_PATH}): run devenv/bin/setup.sh"
 fi
 for p in "${JIP_CODE_PATH}" "${MOCK_DEZI_CODE_PATH}" "${JIP_TEST_SP_CODE_PATH}"; do
-    [[ -d "$p" ]] && ok "code path $p" || miss "code path $p (created in a later step)"
+    [[ -d "$p" ]] && ok "code path $p" || miss "code path $p (check JIP_CODE_PATH, MOCK_DEZI_CODE_PATH and JIP_TEST_SP_CODE_PATH in devenv/.env)"
 done
 
 section "JIP application (host PHP, mock configuration)"
@@ -173,7 +173,7 @@ else
 fi
 
 section "Compose model (docker compose config; nothing is created)"
-if compose --profile jip config --quiet 2>/tmp/jip-compose-err.$$; then
+if err=$(compose --profile jip config --quiet 2>&1 >/dev/null); then
     ok "compose files render (devconf core + engine override + JIP overlay)"
     images=$(compose --profile jip config --images 2>/dev/null | sort -u)
     grep -q 'openconext-basecontainers/php85-apache2-node24' <<<"$images" \
@@ -191,10 +191,9 @@ if compose --profile jip config --quiet 2>/tmp/jip-compose-err.$$; then
     ports=$(compose config --format json 2>/dev/null | php -r '$c=json_decode(stream_get_contents(STDIN),true); foreach ($c["services"]["mariadb"]["ports"] ?? [] as $p) echo ($p["host_ip"] ?? "0.0.0.0").":".$p["published"]." ";')
     [[ "$ports" != *":3306 "* ]] && ok "mariadb published on ${ports% } (not 3306)" || bad "mariadb still publishes host port 3306"
 else
-    bad "compose config failed: $(head -3 /tmp/jip-compose-err.$$)"
+    bad "compose config failed: $(head -3 <<<"$err")"
     images=""
 fi
-rm -f /tmp/jip-compose-err.$$
 
 section "Container images present locally (pulling is not done by this script)"
 for img in $images; do

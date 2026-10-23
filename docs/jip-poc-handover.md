@@ -34,7 +34,7 @@ Prerequisites, versions and background are in [devenv/README.md](../devenv/READM
 the repository root:
 
 1. Install Docker Engine with Compose ≥ 2.24, PHP 8.5 with `openssl` and `gmp`, Composer 2, and
-   Python 3 with `requests` and `beautifulsoup4`.
+   Python 3 with `requests` and `beautifulsoup4`, plus the `acl` package (`setfacl`/`getfacl`).
 2. Install dependencies: `composer --working-dir=jip install`, `composer --working-dir=mock-dezi install`,
    `composer --working-dir=test-sp install`.
 3. Prepare the environment: `devenv/bin/setup.sh`. It fetches devconf and

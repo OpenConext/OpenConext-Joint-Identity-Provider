@@ -5,6 +5,7 @@
     "require": {
         "php": "^8.5",
         "ext-ctype": "*",
+        "ext-gmp": "*",
         "ext-iconv": "*",
         "ext-openssl": "*",
         "psr/log": "^3.0",

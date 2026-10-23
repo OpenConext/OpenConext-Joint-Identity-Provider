@@ -131,7 +131,8 @@ and its private key is deleted after issuance (`core/scripts/create_dev_ca.sh`).
   Docker address pool for `core_coreconextdev`.
 - The container images pinned in `env.dist`; download them with `bin/compose.sh pull`.
 - Host names resolving to the Docker host and the development CA trusted by the browser; see below.
-- PHP 8.5 and Composer 2 for dependency installation and host-side commands. Composer checks each
+- The `acl` package (`setfacl` and `getfacl`) for bind-mount permissions.
+- PHP 8.5 with `openssl` and `gmp`, and Composer 2 for dependency installation and host-side commands. Composer checks each
   application's required extensions.
 - Installed dependencies for `../jip`, `../mock-dezi` and `../test-sp`; mock keys and ACLs prepared
   by `bin/setup.sh`.

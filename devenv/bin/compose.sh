@@ -8,7 +8,7 @@ source "$(dirname -- "${BASH_SOURCE[0]}")/_env.sh"
 
 if [[ ",${COMPOSE_PROFILES:-}," == *",jip,"* ]]; then
     for p in "${JIP_CODE_PATH}" "${MOCK_DEZI_CODE_PATH}" "${JIP_TEST_SP_CODE_PATH}"; do
-        [[ -d "$p" ]] || { echo "Profile jip needs ${p}; it does not exist yet" >&2; exit 1; }
+        [[ -d "$p" ]] || { echo "Profile jip needs ${p}; check the code-path settings in devenv/.env" >&2; exit 1; }
     done
 fi
 

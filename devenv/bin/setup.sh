@@ -53,9 +53,22 @@ fi
 
 if [[ ! -f "${JIP_DEVENV_DIR}/.env" ]]; then
     info "Creating devenv/.env with a new SBS API token"
-    sed "s|^JIP_SBS_API_TOKEN=.*|JIP_SBS_API_TOKEN=$(openssl rand -hex 32)|" \
-        "${JIP_DEVENV_DIR}/env.dist" > "${JIP_DEVENV_DIR}/.env"
-    chmod 600 "${JIP_DEVENV_DIR}/.env"
+    (
+        umask 077
+        env_tmp=$(mktemp "${JIP_DEVENV_DIR}/.env.XXXXXX")
+        trap 'rm -f -- "$env_tmp"' EXIT
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+        token=$(openssl rand -hex 32)
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            if [[ "$line" == JIP_SBS_API_TOKEN=* ]]; then
+                printf 'JIP_SBS_API_TOKEN=%s\n' "$token"
+            else
+                printf '%s\n' "$line"
+            fi
+        done < "${JIP_DEVENV_DIR}/env.dist" > "$env_tmp"
+        mv -- "$env_tmp" "${JIP_DEVENV_DIR}/.env"
+    )
 fi
 
 haproxy_dir="${DEVCONF_CORE_DIR}/haproxy"
