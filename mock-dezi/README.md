@@ -35,7 +35,8 @@ These match JIP's [config/jip/mock.yaml](../jip/config/jip/mock.yaml): issuer, t
 addresses, the expected envelope and statement issuers, the assurance values, the status address
 template and client `jip-mock-ggd`. The mock's envelope audiences deliberately differ from the
 client IDs: `jip-mock-ggd-envelope` and `jip-mock-ggd-none-envelope`. JIP's mock configuration sets
-them explicitly as the expected envelope audiences (`provider.envelope.audiences`).
+only `jip-mock-ggd-envelope` as the expected audience for its configured `ggd` client
+(`provider.envelope.audiences`). The `none` client is used by the mock's own tests.
 
 ## Initialization
 

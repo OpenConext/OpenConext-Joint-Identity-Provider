@@ -218,7 +218,9 @@ be filled from the mock.
 - **govroam, application owners:** the versioned organisation list and its change process; the
   attribute names and namespace (the names here are placeholders); the repository name; per
   application the required attributes, roles, subscribers, restart URL, rules for logins without
-  DEZI, session limits and revocation delay; the compliance and audit review.
+  DEZI, session limits and revocation delay; confirmation that no application requests a Stepup
+  level in its login request; a real-application test that missing DEZI attributes or a login flag
+  other than `verified` grant no DEZI-based access; the compliance and audit review.
 - **GGD GHOR:** the provisioning contract for the DEZI number, and IdPs that send it as a string.
 - **SURF:** the organisation's level in the assertion; a possible EngineBlock merge change; the Stepup
   nonce fix if an application needs Stepup.
