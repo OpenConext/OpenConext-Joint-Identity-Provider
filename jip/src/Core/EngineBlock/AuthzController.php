@@ -9,6 +9,7 @@ use JointIdentityProvider\Core\Start\StartRequest;
 use JointIdentityProvider\Core\Start\TransactionStarter;
 use JointIdentityProvider\Core\Transaction\TransactionState;
 use JsonException;
+use stdClass;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -42,11 +43,17 @@ final readonly class AuthzController
         }
 
         try {
-            $data = json_decode($request->getContent(), true, 16, JSON_THROW_ON_ERROR);
+            $data = json_decode($request->getContent(), false, 16, JSON_THROW_ON_ERROR);
         } catch (JsonException) {
             return self::respond(['msg' => self::MSG_ERROR], Response::HTTP_BAD_REQUEST);
         }
 
+        if ($data instanceof stdClass) {
+            $data = (array) $data;
+            $attributes = $data['attributes'] ?? null;
+            $data['attributes'] = $attributes instanceof stdClass ? (array) $attributes
+                : ($attributes === [] ? [] : null);
+        }
         $startRequest = StartRequest::fromJson($data, $configuration->binding->organisationAttribute);
         if ($startRequest === null) {
             return self::respond(['msg' => self::MSG_ERROR], Response::HTTP_BAD_REQUEST);

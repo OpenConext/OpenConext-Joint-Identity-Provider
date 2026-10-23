@@ -81,6 +81,14 @@ final class AuthzTest extends WebTestCase
         self::assertSame('organisation_refused', $this->stored($body)->failureType);
     }
 
+    public function test_a_numeric_attribute_name_is_accepted_as_a_json_object_key(): void
+    {
+        $body = $this->start([], ['attributes' => (object) ['1' => ['ignored'], self::BINDING => ['123456789']]]);
+
+        self::assertResponseStatusCodeSame(200);
+        self::assertSame(TransactionState::Pending, $this->stored($body)->state);
+    }
+
     public function test_each_start_gets_its_own_nonce(): void
     {
         $first = $this->start([]);

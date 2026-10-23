@@ -50,7 +50,8 @@ final readonly class StartRequest
         $names = [];
         $byName = [];
         foreach ($attributes as $name => $values) {
-            if (!is_string($name) || $name === '') {
+            $name = (string) $name;
+            if ($name === '') {
                 return null;
             }
             $names[] = $name;
