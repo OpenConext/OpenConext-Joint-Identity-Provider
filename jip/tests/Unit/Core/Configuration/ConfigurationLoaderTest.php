@@ -13,6 +13,7 @@ use JointIdentityProvider\Profile\Dezi\DeziProfileConfiguration;
 use JointIdentityProvider\Tests\Support\ConfigurationFixture as Fixture;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Yaml\Yaml;
 
 /**
  * The startup checks of design §17, each with a passing and a failing case (design §18 "Startup").
@@ -80,6 +81,45 @@ final class ConfigurationLoaderTest extends TestCase
         self::assertContains('provider.approved_key_addresses.envelope: is an unreplaced placeholder', $errors);
         self::assertContains('provider.envelope.subject_association: is an unreplaced placeholder', $errors);
         self::assertContains('transactions.store: is an unreplaced placeholder', $errors);
+    }
+
+    public function test_the_filled_acceptance_template_is_refused_only_for_its_single_node_store(): void
+    {
+        $template = Yaml::parseFile(Fixture::projectDir() . '/config/jip/acceptance.yaml.dist');
+        self::assertIsArray($template);
+        $changes = [
+            [['provider', 'approved_key_addresses', 'envelope'], 'https://acceptatie.auth.dezi.nl/envelope/jwks'],
+            [['provider', 'expected_issuers', 'envelope'], 'acceptance-envelope'],
+            [['provider', 'expected_issuers', 'statement'], 'acceptance-statement'],
+            [['provider', 'expected_assurance', 'loa_authn'], 'high'],
+            [['provider', 'expected_assurance', 'loa_dezi'], 'high'],
+            [['provider', 'envelope', 'statement_claim'], 'statement'],
+            [['provider', 'envelope', 'subject_association'], 'envelope_sub'],
+            [['provider', 'envelope', 'audiences', 'ggd'], 'acceptance-client'],
+            [['provider', 'clients', 'ggd', 'client_id'], 'acceptance-client'],
+            [['provider', 'clients', 'ggd', 'signing_key', 'certificate'], $this->fixture->directory . '/signing.crt'],
+            [['provider', 'clients', 'ggd', 'signing_key', 'private_key'], $this->fixture->directory . '/signing.pem'],
+            [['provider', 'clients', 'ggd', 'decryption_keys', 0, 'certificate'], $this->fixture->directory . '/decryption.crt'],
+            [['provider', 'clients', 'ggd', 'decryption_keys', 0, 'private_key'], $this->fixture->directory . '/decryption.pem'],
+            [['transactions', 'store'], 'sqlite:' . $this->fixture->storePath()],
+            [['services', 'https://app.ggd.example.nl/saml/metadata', 'connection_policy_version'], 'acceptance-1'],
+            [['services', 'https://app.ggd.example.nl/saml/metadata', 'restart_login_url'], 'https://app.ggd.example.nl/login'],
+        ];
+        // Filling a value must not recreate a required field deleted from the template.
+        foreach ($changes as [$keys]) {
+            $value = $template;
+            foreach ($keys as $key) {
+                self::assertIsArray($value);
+                self::assertArrayHasKey($key, $value);
+                $value = $value[$key];
+            }
+        }
+        $path = $this->fixture->writeConfiguration($this->apply($template, $changes));
+
+        self::assertSame(
+            ['transactions.store: must be a shared store outside the mock environment'],
+            self::errorsOf(static fn () => Fixture::loader($path, 'acceptance')->load()),
+        );
     }
 
     public function test_the_acceptance_template_holds_no_mock_assumption(): void
