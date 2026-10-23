@@ -138,6 +138,9 @@ final class ScenarioTest extends MockDeziTestCase
         $keys = $this->jip->keySet(self::ID_TOKEN_KEYS);
         $claims = JipSimulator::payload($idToken);
         $verified = JipSimulator::verify($idToken, $keys);
+        if (in_array($scenario, [Scenario::IdTokenWrongIssuer, Scenario::IdTokenWrongNonce], true)) {
+            self::assertNotNull($verified);
+        }
         match ($scenario) {
             Scenario::IdTokenBadSignature, Scenario::IdTokenUnknownKid => self::assertNull($verified),
             Scenario::IdTokenSignedWithStatementKey => self::assertSame(
@@ -189,7 +192,10 @@ final class ScenarioTest extends MockDeziTestCase
             Scenario::UserInfoNotEncrypted => self::assertSame(['RS256', 3], [$header['alg'], count(explode('.', $body))]),
             Scenario::UserInfoWrongKeyAlgorithm => self::assertSame(['RSA-OAEP-256', 'A256CBC-HS512'], [$header['alg'], $header['enc']]),
             Scenario::UserInfoWrongContentEncryption => self::assertSame(['RSA-OAEP', 'A256GCM'], [$header['alg'], $header['enc']]),
-            Scenario::UserInfoUnregisteredKey => self::assertFalse($this->decrypts($body)),
+            Scenario::UserInfoUnregisteredKey => self::assertSame(
+                ['RSA-OAEP', 'A256CBC-HS512', 5, false],
+                [$header['alg'], $header['enc'], count(explode('.', $body)), $this->decrypts($body)],
+            ),
             Scenario::UserInfoUnknownKid => self::assertSame([true, 'mock-dezi-unknown-encryption-kid'], [
                 $this->decrypts($body),
                 $header['kid'],
@@ -201,6 +207,9 @@ final class ScenarioTest extends MockDeziTestCase
     private function assertEnvelope(Scenario $scenario, string $envelope): void
     {
         $verified = JipSimulator::verify($envelope, $this->jip->keySet(self::ENVELOPE_KEYS));
+        if ($scenario === Scenario::EnvelopeWrongIssuer) {
+            self::assertNotNull($verified);
+        }
         $byIdTokenKey = JipSimulator::verify($envelope, $this->jip->keySet(self::ID_TOKEN_KEYS));
         $header = JipSimulator::header($envelope);
         $claims = JipSimulator::payload($envelope);
@@ -249,6 +258,9 @@ final class ScenarioTest extends MockDeziTestCase
     private function assertStatement(Scenario $scenario, string $statement, array $envelope): void
     {
         $verified = JipSimulator::verify($statement, $this->jip->keySet(self::STATEMENT_KEYS));
+        if (in_array($scenario, [Scenario::StatementWrongIssuer, Scenario::StatementVerklaringIdMismatch], true)) {
+            self::assertNotNull($verified);
+        }
         $byIdTokenKey = JipSimulator::verify($statement, $this->jip->keySet(self::ID_TOKEN_KEYS));
         $header = JipSimulator::header($statement);
         match ($scenario) {

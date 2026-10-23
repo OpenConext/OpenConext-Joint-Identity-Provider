@@ -6,6 +6,7 @@ namespace JointIdentityProvider\Tests\Unit\Profile\Dezi;
 
 use DateTimeImmutable;
 use JointIdentityProvider\Profile\Dezi\DeziFailure;
+use JointIdentityProvider\Profile\Dezi\DeziProfileConfiguration;
 use JointIdentityProvider\Profile\Dezi\DeziRevocationConfiguration;
 use JointIdentityProvider\Profile\Dezi\RevocationChecker;
 use JointIdentityProvider\Tests\Support\OidcFixture;
@@ -42,6 +43,23 @@ final class RevocationCheckerTest extends TestCase
         self::assertEquals($checkedAt->modify('+60 seconds'), $validUntil);
         self::assertSame([$this->provider->statusUrl()], array_column($this->provider->requests, 'url'));
         self::assertEquals(3, $this->provider->requests[0]['options']['timeout'] ?? null);
+    }
+
+    public function test_a_configured_timeout_above_five_seconds_reaches_the_http_client(): void
+    {
+        $configuration = $this->oidc->configuration([
+            [['engineblock', 'call_timeout_seconds'], 20],
+            [['provider', 'revocation', 'timeout_seconds'], 10],
+        ])->provider->profileConfiguration;
+        self::assertInstanceOf(DeziProfileConfiguration::class, $configuration);
+
+        new RevocationChecker($this->oidc->http, $this->oidc->clock)->check(
+            TestProvider::VERKLARING_ID,
+            $configuration->revocation,
+        );
+
+        self::assertSame(10.0, $this->provider->requests[0]['options']['timeout'] ?? null);
+        self::assertSame(10.0, $this->provider->requests[0]['options']['max_duration'] ?? null);
     }
 
     public function test_the_url_comes_from_the_configured_template(): void

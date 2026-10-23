@@ -250,6 +250,16 @@ final class DeziProfileTest extends TestCase
         self::assertSame(0, $this->statusRequests());
     }
 
+    public function test_a_uuid_with_a_trailing_newline_is_refused_before_the_status_check(): void
+    {
+        $id = TestProvider::VERKLARING_ID . "\n";
+        $this->provider->envelopeClaims = ['verklaring_id' => $id];
+        $this->provider->statementClaims = ['verklaring_id' => $id];
+
+        $this->assertFailure($this->validate(), 'statement_invalid');
+        self::assertSame(0, $this->statusRequests());
+    }
+
     public function test_the_status_check_uses_the_configured_address_and_never_the_statement_link(): void
     {
         $this->verified($this->validate());
