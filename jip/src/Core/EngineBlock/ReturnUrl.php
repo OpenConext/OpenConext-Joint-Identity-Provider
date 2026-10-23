@@ -12,7 +12,7 @@ final class ReturnUrl
 {
     public static function isValid(string $url, string $prefix): bool
     {
-        if (preg_match('/^[\x21-\x7E]+$/', $url) !== 1 || str_contains($url, '#') || !str_starts_with($url, $prefix)) {
+        if (preg_match('/^[\x21-\x7E]+\z/', $url) !== 1 || str_contains($url, '#') || !str_starts_with($url, $prefix)) {
             return false;
         }
 

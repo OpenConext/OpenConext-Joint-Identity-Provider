@@ -273,7 +273,7 @@ final readonly class ConfigNode
             return sprintf('%s[%d]', $parent, $key);
         }
 
-        $segment = preg_match('/^[A-Za-z0-9_]+$/', $key) === 1 ? $key : sprintf("['%s']", $key);
+        $segment = preg_match('/^[A-Za-z0-9_]+\z/', $key) === 1 ? $key : sprintf("['%s']", $key);
 
         if ($parent === '') {
             return $segment;

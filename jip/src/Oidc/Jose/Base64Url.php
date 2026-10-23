@@ -16,7 +16,7 @@ final class Base64Url
      */
     public static function decode(string $encoded): ?string
     {
-        if (preg_match('/^[A-Za-z0-9_-]*$/', $encoded) !== 1) {
+        if (preg_match('/^[A-Za-z0-9_-]*\z/', $encoded) !== 1) {
             return null;
         }
         $decoded = base64_decode(strtr($encoded, '-_', '+/'), true);
@@ -34,6 +34,6 @@ final class Base64Url
 
     public static function isRandomToken(string $value): bool
     {
-        return preg_match('/^[A-Za-z0-9_-]{43}$/', $value) === 1;
+        return preg_match('/^[A-Za-z0-9_-]{43}\z/', $value) === 1;
     }
 }

@@ -17,7 +17,7 @@ use Symfony\Component\Yaml\Yaml;
  */
 final readonly class ConfigurationLoader
 {
-    private const string ENV_REFERENCE = '/^%env\(([A-Za-z_][A-Za-z0-9_]*)\)%$/';
+    private const string ENV_REFERENCE = '/^%env\(([A-Za-z_][A-Za-z0-9_]*)\)%\z/';
     private const string PLACEHOLDER = '/<[^<>]*>/';
 
     public function __construct(

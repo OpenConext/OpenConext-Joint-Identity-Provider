@@ -22,8 +22,8 @@ use Throwable;
 final readonly class TransactionStarter
 {
     private const int MAX_ADD_ATTEMPTS = 3;
-    private const string TRANSACTION_ID = '/^[A-Za-z0-9_-]{43}$/';
-    private const string LOG_ID = '/^[0-9a-f]{16}$/';
+    private const string TRANSACTION_ID = '/^[A-Za-z0-9_-]{43}\z/';
+    private const string LOG_ID = '/^[0-9a-f]{16}\z/';
 
     public function __construct(
         private TransactionStore $store,

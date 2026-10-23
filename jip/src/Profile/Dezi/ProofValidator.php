@@ -40,7 +40,7 @@ final readonly class ProofValidator
     // Always non-empty strings; null never stands in for them (design §14).
     public const array REQUIRED_CLAIMS = ['dezi_nummer', 'abonnee_nummer'];
 
-    private const string UUID = '/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/';
+    private const string UUID = '/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\z/';
 
     public function __construct(private SignedMessageVerifier $verifier)
     {

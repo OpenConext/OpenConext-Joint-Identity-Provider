@@ -10,7 +10,7 @@ namespace JointIdentityProvider\TestSp;
  */
 final class Log
 {
-    private const string SAML_ID = '/^[A-Za-z0-9_.:-]{1,128}$/';
+    private const string SAML_ID = '/^[A-Za-z0-9_.:-]{1,128}\z/';
 
     public static function info(string $message): void
     {

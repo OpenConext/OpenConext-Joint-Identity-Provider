@@ -161,7 +161,7 @@ final readonly class KeyResolver
         if (
             ($entry['kty'] ?? null) !== 'RSA' || !is_string($kid) || !is_string($n) || !is_string($e)
             || $use !== 'sig' || $alg !== 'RS256'
-            || preg_match('/^[A-Za-z0-9_-]+$/', $n . $e) !== 1
+            || preg_match('/^[A-Za-z0-9_-]+\z/', $n . $e) !== 1
         ) {
             return null;
         }

@@ -11,7 +11,7 @@ use JointIdentityProvider\Core\Transaction\Transaction;
  */
 final class LogFields
 {
-    private const string LOGGABLE_REQUEST_ID = '/^[A-Za-z0-9_.:-]{1,128}$/';
+    private const string LOGGABLE_REQUEST_ID = '/^[A-Za-z0-9_.:-]{1,128}\z/';
 
     /**
      * The start-side correlation fields shared by every transaction log (design §20).
@@ -44,6 +44,6 @@ final class LogFields
      */
     public static function entityId(string $entityId): string
     {
-        return preg_match('/^[\x21-\x7E]{1,512}$/', $entityId) === 1 ? $entityId : '[unprintable]';
+        return preg_match('/^[\x21-\x7E]{1,512}\z/', $entityId) === 1 ? $entityId : '[unprintable]';
     }
 }
