@@ -30,6 +30,10 @@ final class LogFieldsTest extends TestCase
             'https://sp.example', 'https://idp.example', "_request\nforged outcome",
             'https://sp.example', 'https://idp.example', '-',
         ];
+        yield 'trailing newline in every identifier' => [
+            "https://sp.example\n", "https://idp.example\n", "_request\n",
+            '[unprintable]', '[unprintable]', '-',
+        ];
         yield 'overlong identifiers' => [
             'https://sp.example/' . str_repeat('x', 512), 'https://idp.example', str_repeat('x', 129),
             '[unprintable]', 'https://idp.example', '-',
