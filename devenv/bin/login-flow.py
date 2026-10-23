@@ -145,13 +145,18 @@ def finish(args, browser, response, page, where):
                     print('  ' + ' = '.join(text(c) for c in row.find_all('td')))
     elif where == 'jip':
         reason = page.find(string=re.compile('Reason'))
-        failure = text(reason.find_next('code')) if reason else 'unknown'
+        # JIP's page for an unknown nonce or state names no failure type, log ID or restart link.
+        invalid_link = 'not valid' in text(page.find('h1'))
+        failure = text(reason.find_next('code')) if reason else 'link_not_valid' if invalid_link else 'unknown'
         restart = page.find('a', string=re.compile('Restart login'))
         log_id = page.find(string=re.compile('Log ID'))
         outcome = f'jip-error:{failure}'
         print(f'{args.account}: JIP error page HTTP {response.status_code}, {failure},'
               f' log ID {text(log_id.find_next("code")) if log_id else "-"},'
               f' restart link {"yes" if restart else "no"}')
+        if args.restart and args.restart != ('yes' if restart else 'no'):
+            print(f'  EXPECTED restart link {args.restart}')
+            return 1
     else:
         outcome = f'stopped:{where}'
         print(f'{args.account}: stopped ({where}) at {safe(response.url)} HTTP {response.status_code}')
@@ -184,6 +189,7 @@ def main():
     flow.add_argument('--scenario', default='', help='mock DEZI scenario (empty: the default)')
     flow.add_argument('--dezi-action', default='login', choices=['login', 'cancel'])
     flow.add_argument('--expect', help='dezi, organisation, refused or jip-error:<failure type>')
+    flow.add_argument('--restart', choices=['yes', 'no'], help='with a JIP error page: whether it must offer a restart link')
     flow.add_argument('--show-attributes', action='store_true')
     flow.add_argument('-v', '--verbose', action='store_true')
     flow.set_defaults(run=login)
