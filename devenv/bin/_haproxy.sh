@@ -7,7 +7,8 @@ jip_haproxy_logging_is_safe() {
             sub(/[[:space:]]*#.*/, "", line)
             sub(/^[[:space:]]+/, "", line)
             sub(/[[:space:]]+$/, "", line)
-            if (line ~ /^option[[:space:]]+httplog([[:space:]]|$)/) unsafe = 1
+            if (line ~ /^option[[:space:]]+https?log([[:space:]]|$)/) unsafe = 1
+            if (line ~ /^log-format-sd([[:space:]]|$)/) unsafe = 1
             if (line ~ /^log-format([[:space:]]|$)/) {
                 if (line != "log-format \"%ci:%cp [%t] %ft %b/%s %ST %B\"") unsafe = 1
                 seen = 1

@@ -194,7 +194,11 @@ def main():
     flow.add_argument('-v', '--verbose', action='store_true')
     flow.set_defaults(run=login)
     args = parser.parse_args()
-    return args.run(args)
+    try:
+        return args.run(args)
+    except requests.RequestException as error:
+        print(f'Request failed: {type(error).__name__}', file=sys.stderr)
+        return 1
 
 
 if __name__ == '__main__':

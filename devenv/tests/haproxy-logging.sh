@@ -25,7 +25,7 @@ for directive in 'option httplog # upstream comment' 'option httplog clf' \
 done
 
 # A second active format must not override the approved one; comments are harmless.
-for directive in 'log-format "%r"' 'option httplog clf'; do
+for directive in 'log-format "%r"' 'option httplog clf' 'option httpslog' 'log-format-sd [request="%r"]'; do
     cp "$review_dir/previous" "$review_dir/unsafe"
     printf '    %s\n' "$directive" >> "$review_dir/unsafe"
     if jip_haproxy_logging_is_safe "$review_dir/unsafe"; then exit 1; fi

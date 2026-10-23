@@ -188,6 +188,12 @@ if err=$(compose --profile jip config --quiet 2>&1 >/dev/null); then
         [[ " $aliases " == *" $h.dev.openconext.local "* ]] && ok "in-network alias $h.dev.openconext.local -> haproxy" \
             || bad "in-network alias $h.dev.openconext.local missing"
     done
+    proxy_bindings=$(compose --profile jip config --format json 2>/dev/null | php -r '$c=json_decode(stream_get_contents(STDIN),true); foreach ($c["services"]["haproxy"]["ports"] ?? [] as $p) echo ($p["host_ip"] ?? "0.0.0.0")."\n";')
+    if [[ -n "$proxy_bindings" ]] && ! grep -qvEx '127\.0\.0\.1|::1' <<<"$proxy_bindings"; then
+        ok "HAProxy published on loopback only"
+    else
+        bad "HAProxy must publish on 127.0.0.1 or ::1 only (mock admin API has no authentication)"
+    fi
     ports=$(compose config --format json 2>/dev/null | php -r '$c=json_decode(stream_get_contents(STDIN),true); foreach ($c["services"]["mariadb"]["ports"] ?? [] as $p) echo ($p["host_ip"] ?? "0.0.0.0").":".$p["published"]." ";')
     [[ "$ports" != *":3306 "* ]] && ok "mariadb published on ${ports% } (not 3306)" || bad "mariadb still publishes host port 3306"
 else

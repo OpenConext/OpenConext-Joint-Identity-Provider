@@ -4,6 +4,12 @@
 # Relative paths would resolve against devconf's core/ directory, so every local path is absolute.
 services:
   haproxy:
+    # The mock admin API is unauthenticated: expose the POC only to this host.
+    ports: !override
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
+      - "[::1]:80:80"
+      - "[::1]:443:443"
     volumes:
       - ${JIP_DEVENV_DIR}/haproxy/generated/backends.map:/usr/local/etc/haproxy/backends.map:ro
       - ${JIP_DEVENV_DIR}/haproxy/generated/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro

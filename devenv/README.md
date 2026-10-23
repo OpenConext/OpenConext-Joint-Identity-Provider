@@ -160,8 +160,8 @@ sudo update-ca-certificates
 
 Restart your browser after installing the CA. If it uses a separate certificate store, import
 `devenv/certs/openconext-dev-ca.crt` there as a trusted certificate authority. Add the host entries
-on the machine running the browser; if it is a different machine, use the Docker host's address
-instead of loopback and omit the `::1` entry.
+on the machine running the browser. HAProxy binds to loopback because the mock admin API has no
+authentication. For a remote browser, tunnel ports 80 and 443 over SSH and keep these loopback entries.
 
 First start (creates containers). EngineBlock needs its database before it turns healthy, as in
 devconf's README:
