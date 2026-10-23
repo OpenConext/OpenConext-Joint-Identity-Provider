@@ -194,6 +194,27 @@ final class BrowserFlowTest extends WebTestCase
         self::assertNull($this->cookie($transaction), 'The callback removes the transaction cookie.');
     }
 
+    public function test_a_hand_off_cache_failure_has_a_log_id_and_secure_error_page(): void
+    {
+        $this->recordLog();
+        $id = $this->start(['900000001']);
+        $cache = self::getContainer()->getParameter('kernel.cache_dir');
+        self::assertIsString($cache);
+        file_put_contents($cache . '/jip-provider', 'not-a-directory');
+        try {
+            $this->client->request('GET', self::JIP . '/interrupt?nonce=' . $id);
+            self::assertResponseStatusCodeSame(500);
+            self::assertStringContainsString('internal_error', $this->bodyText());
+            self::assertStringContainsString($this->stored($id)->logId, $this->bodyText());
+            self::assertResponseHeaderSame('Cache-Control', 'no-store, private');
+            self::assertTrue($this->client->getResponse()->headers->has('Content-Security-Policy'));
+            self::assertSame(TransactionState::Pending, $this->stored($id)->state);
+            self::assertStringContainsString('RuntimeException', implode("\n", $this->logLines));
+        } finally {
+            unlink($cache . '/jip-provider');
+        }
+    }
+
     public function test_a_replayed_callback_never_redeems_the_code_again(): void
     {
         $id = $this->start(['900000001']);

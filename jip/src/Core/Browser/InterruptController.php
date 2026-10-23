@@ -23,6 +23,7 @@ use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Throwable;
 
 /**
  * The browser hand-off from EngineBlock (design §3, §12, §13). A pending transaction moves to
@@ -50,16 +51,33 @@ final readonly class InterruptController
             return BrowserPages::unknown();
         }
 
-        $transaction = $this->store->find($nonce);
-        if ($transaction === null) {
-            return BrowserPages::unknown();
-        }
+        $transaction = null;
+        try {
+            $transaction = $this->store->find($nonce);
+            if ($transaction === null) {
+                return BrowserPages::unknown();
+            }
 
-        return match ($transaction->state) {
-            TransactionState::Pending => $this->handOff($transaction, $configuration),
-            TransactionState::Skipped => $this->returnToEngineBlock($transaction, $configuration),
-            default => $this->stateFor($transaction, $configuration),
-        };
+            return match ($transaction->state) {
+                TransactionState::Pending => $this->handOff($transaction, $configuration),
+                TransactionState::Skipped => $this->returnToEngineBlock($transaction, $configuration),
+                default => $this->stateFor($transaction, $configuration),
+            };
+        } catch (Throwable $exception) {
+            // Messages and traces can contain authentication material.
+            $this->logger->error('JIP hand-off {log_id}: internal_error ({exception_class})', [
+                'log_id' => $transaction->logId ?? '-',
+                'exception_class' => $exception::class,
+            ]);
+
+            return BrowserPages::failure(
+                FailureType::InternalError->value,
+                false,
+                $transaction,
+                null,
+                Response::HTTP_INTERNAL_SERVER_ERROR,
+            );
+        }
     }
 
     private function handOff(Transaction $transaction, JipConfiguration $configuration): Response
