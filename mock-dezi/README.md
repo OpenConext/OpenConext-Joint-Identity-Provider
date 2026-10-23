@@ -51,7 +51,8 @@ bin/console mock-dezi:reset --check    # configuration, fixtures and keys usable
 
 `devenv/bin/setup.sh` runs `bin/init-keys` as well and gives the container's web-server user
 (`www-data`, uid 33) ACL access to `keys/` and `var/`, as it does for JIP. `devenv/bin/check.sh`
-verifies it.
+verifies it. State updates use atomic file replacement under a separate lock. Corrupt or incompatible
+state files cause an error; run `bin/console mock-dezi:reset` to reset them explicitly.
 
 | Variable | Default (`.env`) | Meaning |
 | --- | --- | --- |

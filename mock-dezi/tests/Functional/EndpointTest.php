@@ -4,15 +4,54 @@ declare(strict_types=1);
 
 namespace MockDezi\Tests\Functional;
 
+use MockDezi\Store\State;
+use MockDezi\Store\StateStore;
 use MockDezi\Tests\Support\JipSimulator;
 use MockDezi\Tests\Support\MockDeziTestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
+use RuntimeException;
+use Symfony\Component\Clock\NativeClock;
 
 /**
  * Discovery, key sets, the authorisation request checks, endpoint modes, statement selection and reset.
  */
 final class EndpointTest extends MockDeziTestCase
 {
+    public function test_corrupt_state_is_refused_and_an_explicit_reset_repairs_it(): void
+    {
+        $path = $this->fixture->directory . '/state.json';
+        $store = new StateStore(dirname(__DIR__, 2), $path, new NativeClock());
+        foreach (['', 'truncated-serialized-state'] as $contents) {
+            file_put_contents($path, $contents);
+            try {
+                $store->transaction(static fn (State $state): int => count($state->usedAssertionIds));
+                self::fail('Corrupt state must not silently reset replay protection.');
+            } catch (RuntimeException) {
+                self::assertSame($contents, file_get_contents($path));
+            }
+            $store->reset();
+            self::assertSame(0, $store->transaction(static fn (State $state): int => count($state->usedAssertionIds)));
+        }
+    }
+
+    public function test_a_failed_state_operation_preserves_the_previous_state(): void
+    {
+        $path = $this->fixture->directory . '/state.json';
+        $store = new StateStore(dirname(__DIR__, 2), $path, new NativeClock());
+        $store->reset();
+        $previous = file_get_contents($path);
+        $this->expectException(RuntimeException::class);
+        try {
+            $store->transaction(static function (State $state): void {
+                $state->usedAssertionIds['keep'] = time() + 300;
+                throw new RuntimeException('Interrupted operation');
+            });
+        } finally {
+            self::assertSame($previous, file_get_contents($path));
+            self::assertSame([], glob($this->fixture->directory . '/.mock-state-*'));
+        }
+    }
+
     public function test_discovery_advertises_the_mock_endpoints_and_private_key_jwt(): void
     {
         $this->browser->request('GET', '/.well-known/openid-configuration');

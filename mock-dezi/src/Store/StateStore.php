@@ -44,14 +44,14 @@ final readonly class StateStore
      * @param callable(State): T $operation
      * @return T
      */
-    public function transaction(callable $operation): mixed
+    public function transaction(callable $operation, bool $reset = false): mixed
     {
         $path = Paths::resolve($this->projectDir, $this->stateFile);
         $directory = dirname($path);
         if (!is_dir($directory) && !@mkdir($directory, 0o750, true) && !is_dir($directory)) {
             throw new RuntimeException(sprintf('Cannot create the state directory %s', $directory));
         }
-        $handle = @fopen($path, 'c+');
+        $handle = @fopen($path . '.lock', 'c');
         if ($handle === false) {
             throw new RuntimeException(sprintf('Cannot open the state file %s', $path));
         }
@@ -59,15 +59,35 @@ final readonly class StateStore
             if (!flock($handle, LOCK_EX)) {
                 throw new RuntimeException('Cannot lock the state file');
             }
-            $state = self::decode((string) stream_get_contents($handle));
+            $contents = is_file($path) ? @file_get_contents($path) : '';
+            if ($contents === false) {
+                throw new RuntimeException('Cannot read the state file');
+            }
+            if (!$reset && $contents === '' && is_file($path)) {
+                throw new RuntimeException('The state file is empty');
+            }
+            $state = $reset ? new State() : self::decode($contents);
             $state->prune($this->clock->now()->getTimestamp());
             $result = $operation($state);
             $serialized = serialize($state);
-            if (!ftruncate($handle, 0) || !rewind($handle)) {
-                throw new RuntimeException('Cannot truncate or rewind the state file');
+            // Exclusive creation preserves the directory's default ACL for host/container access.
+            $temporary = $directory . '/.mock-state-' . bin2hex(random_bytes(16));
+            $output = @fopen($temporary, 'x+b');
+            if ($output === false) {
+                throw new RuntimeException('Cannot create a temporary state file');
             }
-            if (fwrite($handle, $serialized) !== strlen($serialized) || !fflush($handle)) {
-                throw new RuntimeException('Cannot write or flush the state file');
+            try {
+                if (fwrite($output, $serialized) !== strlen($serialized) || !fflush($output)) {
+                    throw new RuntimeException('Cannot write or flush the state file');
+                }
+                if (!rename($temporary, $path)) {
+                    throw new RuntimeException('Cannot replace the state file');
+                }
+            } finally {
+                fclose($output);
+                if (is_file($temporary)) {
+                    unlink($temporary);
+                }
             }
 
             return $result;
@@ -81,7 +101,7 @@ final readonly class StateStore
     {
         $this->transaction(static function (State $state): void {
             $state->clear();
-        });
+        }, reset: true);
     }
 
     private static function decode(string $contents): State
@@ -91,7 +111,10 @@ final readonly class StateStore
         }
         $state = @unserialize($contents, ['allowed_classes' => self::ALLOWED_CLASSES]);
 
-        // A state file from an older version of the mock starts over.
-        return $state instanceof State ? $state : new State();
+        if (!$state instanceof State) {
+            throw new RuntimeException('Cannot decode the state file; reset it explicitly before continuing');
+        }
+
+        return $state;
     }
 }
