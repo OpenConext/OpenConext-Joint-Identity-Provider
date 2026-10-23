@@ -9,6 +9,7 @@ use MockDezi\Tests\Support\JipSimulator;
 use MockDezi\Tests\Support\MockDeziTestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Yaml\Yaml;
 use Throwable;
 
 /**
@@ -138,6 +139,11 @@ final class ScenarioTest extends MockDeziTestCase
         $keys = $this->jip->keySet(self::ID_TOKEN_KEYS);
         $claims = JipSimulator::payload($idToken);
         $verified = JipSimulator::verify($idToken, $keys);
+        if (in_array($scenario, [Scenario::IdTokenBadSignature, Scenario::IdTokenUnknownKid], true)) {
+            $kid = JipSimulator::header($idToken)['kid'];
+            self::assertIsString($kid);
+            self::assertSame($scenario === Scenario::IdTokenBadSignature, $keys->has($kid));
+        }
         if (in_array($scenario, [Scenario::IdTokenWrongIssuer, Scenario::IdTokenWrongNonce], true)) {
             self::assertNotNull($verified);
         }
@@ -206,7 +212,13 @@ final class ScenarioTest extends MockDeziTestCase
 
     private function assertEnvelope(Scenario $scenario, string $envelope): void
     {
-        $verified = JipSimulator::verify($envelope, $this->jip->keySet(self::ENVELOPE_KEYS));
+        $keys = $this->jip->keySet(self::ENVELOPE_KEYS);
+        if (in_array($scenario, [Scenario::EnvelopeBadSignature, Scenario::EnvelopeUnknownKid], true)) {
+            $kid = JipSimulator::header($envelope)['kid'];
+            self::assertIsString($kid);
+            self::assertSame($scenario === Scenario::EnvelopeBadSignature, $keys->has($kid));
+        }
+        $verified = JipSimulator::verify($envelope, $keys);
         if ($scenario === Scenario::EnvelopeWrongIssuer) {
             self::assertNotNull($verified);
         }
@@ -257,7 +269,13 @@ final class ScenarioTest extends MockDeziTestCase
      */
     private function assertStatement(Scenario $scenario, string $statement, array $envelope): void
     {
-        $verified = JipSimulator::verify($statement, $this->jip->keySet(self::STATEMENT_KEYS));
+        $keys = $this->jip->keySet(self::STATEMENT_KEYS);
+        if (in_array($scenario, [Scenario::StatementBadSignature, Scenario::StatementUnknownKid], true)) {
+            $kid = JipSimulator::header($statement)['kid'];
+            self::assertIsString($kid);
+            self::assertSame($scenario === Scenario::StatementBadSignature, $keys->has($kid));
+        }
+        $verified = JipSimulator::verify($statement, $keys);
         if (in_array($scenario, [Scenario::StatementWrongIssuer, Scenario::StatementVerklaringIdMismatch], true)) {
             self::assertNotNull($verified);
         }
@@ -266,7 +284,7 @@ final class ScenarioTest extends MockDeziTestCase
         match ($scenario) {
             Scenario::StatementBadSignature, Scenario::StatementUnknownKid => self::assertSame([null, null], [$verified, $byIdTokenKey]),
             Scenario::StatementSignedWithIdTokenKey => self::assertSame(
-                [false, true, JipSimulator::ISSUER . self::STATEMENT_KEYS],
+                [false, false, JipSimulator::ISSUER . self::STATEMENT_KEYS],
                 [$verified !== null, $byIdTokenKey !== null, $header['jku']],
             ),
             Scenario::StatementJkuOtherAddress => self::assertSame(
@@ -305,7 +323,17 @@ final class ScenarioTest extends MockDeziTestCase
         } else {
             self::assertNotSame('d3e2a1c0-0001-4000-8000-000000000001', $verklaringId, 'a fresh statement');
         }
+        $started = hrtime(true);
         $this->browser->request('GET', '/status/v1/verklaring/' . $verklaringId);
+        if ($scenario === Scenario::StatusTimeout) {
+            $configuration = Yaml::parseFile($this->fixture->directory . '/mock-dezi.yaml');
+            self::assertIsArray($configuration);
+            self::assertIsInt($configuration['timeout_delay_seconds']);
+            self::assertGreaterThanOrEqual(
+                $configuration['timeout_delay_seconds'],
+                (hrtime(true) - $started) / 1_000_000_000,
+            );
+        }
         $response = $this->browser->getResponse();
         $body = json_decode((string) $response->getContent(), true);
         $status = is_array($body) ? $body['status'] ?? null : null;

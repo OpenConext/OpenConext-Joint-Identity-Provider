@@ -15,6 +15,7 @@ use RuntimeException;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
+use WeakMap;
 
 /**
  * Plays JIP against the mock DEZI provider in tests: builds the requests and checks the answers independently
@@ -24,6 +25,9 @@ final class JipSimulator
 {
     public const string ISSUER = 'https://mock-dezi.dev.openconext.local';
     public const string TOKEN_ENDPOINT = self::ISSUER . '/token';
+
+    /** @var WeakMap<JWKSet, string> */
+    private static WeakMap $keyAddresses;
 
     public string $verifier;
     public string $state;
@@ -193,17 +197,35 @@ final class JipSimulator
     {
         $this->browser->request('GET', $path);
 
-        return JWKSet::createFromKeyData(self::json($this->browser->getResponse()));
+        $keys = JWKSet::createFromKeyData(self::json($this->browser->getResponse()));
+        self::$keyAddresses ??= new WeakMap();
+        self::$keyAddresses[$keys] = self::ISSUER . $path;
+
+        return $keys;
     }
 
     /**
-     * @return array<string, mixed>|null the claims, or null when the RS256 signature does not verify with $keys
+     * @return array<string, mixed>|null claims when headers and the RS256 signature match the supplied key set
      */
     public static function verify(string $jws, JWKSet $keys): ?array
     {
         try {
             $token = (new CompactSerializer())->unserialize($jws);
-            if (!(new JWSVerifier(new AlgorithmManager([new RS256()])))->verifyWithKeySet($token, $keys, 0)) {
+            $header = $token->getSignature(0)->getProtectedHeader();
+            $kid = $header['kid'] ?? null;
+            if (
+                ($header['alg'] ?? null) !== 'RS256' || !is_string($kid) || !$keys->has($kid)
+                || array_key_exists('crit', $header) || array_key_exists('b64', $header)
+            ) {
+                return null;
+            }
+            if (
+                array_key_exists('jku', $header)
+                && $header['jku'] !== (self::$keyAddresses[$keys] ?? null)
+            ) {
+                return null;
+            }
+            if (!(new JWSVerifier(new AlgorithmManager([new RS256()])))->verifyWithKey($token, $keys->get($kid), 0)) {
                 return null;
             }
         } catch (Throwable) {

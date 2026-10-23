@@ -70,7 +70,7 @@ function rejects(callable $test): bool
 {
     try {
         $result = $test();
-    } catch (Throwable) {
+    } catch (Exception) {
         return true;
     }
 
@@ -376,7 +376,7 @@ $hsToken = (new JwsCompact())->serialize((new JWSBuilder(new AlgorithmManager([n
     ->withPayload(json_encode($good))->addSignature($hmacKey, ['alg' => 'HS256'])->build(), 0);
 check('HS256 (algorithm confusion with the public key) refused', fn () => rejects(fn () => verifyRs256($hsToken, $idTokenKeys)));
 check('same kid, unapproved key refused', fn () => rejects(fn () => verifyRs256(signJws($good, $attackerKey, ['alg' => 'RS256', 'kid' => 'op-id-token']), $idTokenKeys)));
-check('jku header is not followed: verification uses only the supplied key set',
+check('unapproved signature with a jku header is refused by supplied-key verification',
     fn () => rejects(fn () => verifyRs256(signJws($good, $attackerKey, ['alg' => 'RS256', 'jku' => 'https://attacker.test/jwks']), $idTokenKeys)));
 $signed = signJws($good, $opIdKey, ['alg' => 'RS256']);
 [$h64, , $s64] = explode('.', $signed);
