@@ -1,6 +1,0 @@
-/upstream/
-/.env
-/haproxy/generated/
-/certs/
-/libcheck/vendor/
-__pycache__/
