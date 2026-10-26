@@ -6,17 +6,18 @@ namespace JointIdentityProvider\Tests\Unit\Core\Start;
 
 use DateTimeImmutable;
 use JointIdentityProvider\Core\Configuration\JipConfiguration;
+use JointIdentityProvider\Core\Configuration\TransactionStoreConfiguration;
 use JointIdentityProvider\Core\Start\IdentifierGenerator;
 use JointIdentityProvider\Core\Start\RandomIdentifierGenerator;
 use JointIdentityProvider\Core\Start\StartOutcome;
 use JointIdentityProvider\Core\Start\StartRequest;
 use JointIdentityProvider\Core\Start\TransactionStarter;
-use JointIdentityProvider\Core\Storage\SqliteTransactionStore;
+use JointIdentityProvider\Core\Storage\MariaDbTransactionStore;
 use JointIdentityProvider\Core\Transaction\Transaction;
 use JointIdentityProvider\Core\Transaction\TransactionState;
 use JointIdentityProvider\Core\Transaction\TransactionStore;
 use JointIdentityProvider\Tests\Support\ConfigurationFixture as Fixture;
-use PDO;
+use JointIdentityProvider\Tests\Support\TestDatabase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -36,15 +37,16 @@ final class TransactionStarterTest extends TestCase
     private Fixture $fixture;
     private JipConfiguration $configuration;
     private MockClock $clock;
-    private SqliteTransactionStore $store;
+    private MariaDbTransactionStore $store;
 
     protected function setUp(): void
     {
+        TestDatabase::reset();
         $this->fixture = new Fixture();
         Fixture::setEnv('EB_API_TOKEN', Fixture::API_TOKEN);
         $this->configuration = Fixture::loader($this->fixture->writeConfiguration($this->fixture->mockConfiguration()))->load();
         $this->clock = new MockClock(new DateTimeImmutable(self::NOW));
-        $this->store = new SqliteTransactionStore($this->fixture->storePath(), $this->clock);
+        $this->store = TestDatabase::store($this->clock);
     }
 
     protected function tearDown(): void
@@ -233,8 +235,11 @@ final class TransactionStarterTest extends TestCase
 
     public function test_a_store_failure_is_an_error(): void
     {
-        file_put_contents($this->fixture->directory . '/not-a-directory', '');
-        $store = new SqliteTransactionStore($this->fixture->directory . '/not-a-directory/transactions.sqlite', $this->clock);
+        $valid = TestDatabase::configuration();
+        $store = new MariaDbTransactionStore(
+            new TransactionStoreConfiguration($valid->host, $valid->port, $valid->database, $valid->user, $valid->password . '-wrong'),
+            $this->clock,
+        );
 
         $outcome = $this->starter(store: $store)->start(self::request([]), $this->configuration);
 
@@ -329,13 +334,6 @@ final class TransactionStarterTest extends TestCase
 
     private function storedCount(): int
     {
-        if (!is_file($this->fixture->storePath())) {
-            return 0;
-        }
-
-        $statement = new PDO('sqlite:' . $this->fixture->storePath())->query('SELECT COUNT(*) FROM jip_transactions');
-        $count = $statement === false ? false : $statement->fetchColumn();
-
-        return is_numeric($count) ? (int) $count : -1;
+        return TestDatabase::rowCount();
     }
 }

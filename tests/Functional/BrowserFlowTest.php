@@ -8,11 +8,11 @@ use DateTimeImmutable;
 use JointIdentityProvider\Core\Logging\LineLogger;
 use JointIdentityProvider\Core\Profile\ProfileRegistry;
 use JointIdentityProvider\Core\Profile\ProviderProfile;
-use JointIdentityProvider\Core\Storage\SqliteTransactionStore;
 use JointIdentityProvider\Core\Transaction\Transaction;
 use JointIdentityProvider\Core\Transaction\TransactionState;
 use JointIdentityProvider\Core\Transaction\TransactionStore;
 use JointIdentityProvider\Tests\Support\ConfigurationFixture as Fixture;
+use JointIdentityProvider\Tests\Support\TestDatabase;
 use JointIdentityProvider\Tests\Support\TestProvider;
 use JointIdentityProvider\Tests\Support\VerifyingProfile;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -49,6 +49,7 @@ final class BrowserFlowTest extends WebTestCase
 
     protected function setUp(): void
     {
+        TestDatabase::reset();
         $this->fixture = new Fixture();
         Fixture::setEnv('EB_API_TOKEN', Fixture::API_TOKEN);
         Fixture::setEnv('CONNECTOR_ENVIRONMENT', 'mock');
@@ -633,7 +634,7 @@ final class BrowserFlowTest extends WebTestCase
 
     public function test_an_internal_error_has_a_safe_page_even_when_failure_persistence_throws(): void
     {
-        $store = new SqliteTransactionStore($this->fixture->storePath(), new NativeClock());
+        $store = TestDatabase::store(new NativeClock());
         $brokenStore = $this->createMock(TransactionStore::class);
         $brokenStore->method('add')->willReturnCallback($store->add(...));
         $brokenStore->method('find')->willReturnCallback($store->find(...));
@@ -759,7 +760,7 @@ final class BrowserFlowTest extends WebTestCase
 
     private function expireAtWrite(TransactionState $state): void
     {
-        $store = new SqliteTransactionStore($this->fixture->storePath(), Clock::get());
+        $store = TestDatabase::store(Clock::get());
         $delayedStore = $this->createMock(TransactionStore::class);
         $delayedStore->method('add')->willReturnCallback($store->add(...));
         $delayedStore->method('find')->willReturnCallback($store->find(...));
@@ -881,7 +882,7 @@ final class BrowserFlowTest extends WebTestCase
 
     private function stored(string $id): Transaction
     {
-        $transaction = new SqliteTransactionStore($this->fixture->storePath(), new NativeClock())->find($id);
+        $transaction = TestDatabase::store(new NativeClock())->find($id);
         self::assertNotNull($transaction);
 
         return $transaction;

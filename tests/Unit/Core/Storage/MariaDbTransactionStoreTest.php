@@ -6,22 +6,26 @@ namespace JointIdentityProvider\Tests\Unit\Core\Storage;
 
 use DateTimeImmutable;
 use InvalidArgumentException;
-use JointIdentityProvider\Core\Storage\SqliteTransactionStore;
+use JointIdentityProvider\Core\Configuration\TransactionStoreConfiguration;
+use JointIdentityProvider\Core\Storage\MariaDbTransactionStore;
 use JointIdentityProvider\Core\Transaction\ProviderAttempt;
 use JointIdentityProvider\Core\Transaction\StoredProfileResult;
 use JointIdentityProvider\Core\Transaction\Transaction;
 use JointIdentityProvider\Core\Transaction\TransactionState;
+use JointIdentityProvider\Tests\Support\ConfigurationFixture;
+use JointIdentityProvider\Tests\Support\TestDatabase;
+use PDO;
+use PDOException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Clock\ClockInterface;
 use RuntimeException;
 use Symfony\Component\Clock\MockClock;
-use Symfony\Component\Filesystem\Filesystem;
 
 /**
- * Persistence and atomic state changes of the single-node store (design §13).
+ * Persistence and atomic state changes of the shared MariaDB store (design §10, §13).
  */
-final class SqliteTransactionStoreTest extends TestCase
+final class MariaDbTransactionStoreTest extends TestCase
 {
     private const string START = '2026-10-20 10:00:00.250000';
     // The state diagram of design §13.
@@ -35,18 +39,12 @@ final class SqliteTransactionStoreTest extends TestCase
         'consumed' => [],
     ];
 
-    private string $directory;
     private MockClock $clock;
 
     protected function setUp(): void
     {
-        $this->directory = sys_get_temp_dir() . '/jip-store-' . bin2hex(random_bytes(6));
+        TestDatabase::reset();
         $this->clock = new MockClock(new DateTimeImmutable(self::START));
-    }
-
-    protected function tearDown(): void
-    {
-        (new Filesystem())->remove($this->directory);
     }
 
     public function test_a_transaction_survives_a_new_store_instance_with_every_field(): void
@@ -99,6 +97,23 @@ final class SqliteTransactionStoreTest extends TestCase
     {
         self::assertNull($this->store()->find('missing'));
         self::assertNull($this->store()->findByOidcState('missing'));
+    }
+
+    public function test_identifiers_are_compared_exactly(): void
+    {
+        $store = $this->store();
+        $transaction = self::transaction('t1', TransactionState::Pending);
+        self::assertTrue($store->add($transaction));
+        $attempt = new ProviderAttempt('state-1', 'nonce-1', 'verifier-1', 'cookie-1', self::at('+1 second'));
+        self::assertTrue($store->compareAndSet('t1', TransactionState::Pending, self::with($transaction, TransactionState::AtProvider, attempt: $attempt), self::at('+1 second')));
+
+        foreach (['T1', 't1 ', "t1\n"] as $id) {
+            self::assertNull($store->find($id), $id);
+        }
+        foreach (['STATE-1', 'state-1 '] as $state) {
+            self::assertNull($store->findByOidcState($state), $state);
+        }
+        self::assertTrue($store->add(self::transaction('T1', TransactionState::Pending, logId: 'LOG-T1')));
     }
 
     public function test_add_refuses_a_duplicate_transaction_id_or_log_id(): void
@@ -183,7 +198,7 @@ final class SqliteTransactionStoreTest extends TestCase
         $clock = self::createStub(ClockInterface::class);
         // Expiry happens after cleanup, so pruning cannot mask a stale consumption check.
         $clock->method('now')->willReturnOnConsecutiveCalls($callerTime, $callerTime, self::at($offset));
-        $store = new SqliteTransactionStore($this->path(), $clock);
+        $store = TestDatabase::store($clock);
         $transaction = self::transaction('t1', TransactionState::Skipped);
         self::assertTrue($store->add($transaction));
 
@@ -213,7 +228,7 @@ final class SqliteTransactionStoreTest extends TestCase
         $clock = self::createStub(ClockInterface::class);
         // The caller's time lies before validUntil; only the time sampled at write decides.
         $clock->method('now')->willReturnOnConsecutiveCalls($callerTime, $callerTime, self::at($offset));
-        $store = new SqliteTransactionStore($this->path(), $clock);
+        $store = TestDatabase::store($clock);
         $transaction = self::transaction('t1', TransactionState::Skipped);
         self::assertTrue($store->add($transaction));
 
@@ -406,14 +421,46 @@ final class SqliteTransactionStoreTest extends TestCase
         self::assertSame($consumed ? TransactionState::Consumed : TransactionState::Skipped, $this->store()->find('live')?->state);
     }
 
-    public function test_an_unusable_location_throws(): void
+    public function test_an_unusable_database_throws(): void
     {
-        (new Filesystem())->dumpFile($this->directory . '/file', '');
-        $store = new SqliteTransactionStore($this->directory . '/file/transactions.sqlite', $this->clock);
+        $valid = TestDatabase::configuration();
+        $configuration = new TransactionStoreConfiguration($valid->host, $valid->port, $valid->database, $valid->user, $valid->password . '-wrong');
+        $store = new MariaDbTransactionStore($configuration, $this->clock);
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(PDOException::class);
 
         $store->add(self::transaction('t1', TransactionState::Pending));
+    }
+
+    public function test_a_tls_required_connection_refuses_a_plaintext_server(): void
+    {
+        $valid = TestDatabase::configuration();
+        $db = new PDO($valid->dsn(), $valid->user, $valid->password);
+        $status = $db->query("SHOW VARIABLES LIKE 'have_ssl'");
+        self::assertNotFalse($status);
+        if ($status->fetchColumn(1) === 'YES') {
+            self::markTestSkipped('This case requires a MariaDB server with TLS disabled.');
+        }
+
+        $fixture = new ConfigurationFixture();
+        try {
+            $configuration = new TransactionStoreConfiguration(
+                $valid->host,
+                $valid->port,
+                $valid->database,
+                $valid->user,
+                $valid->password,
+                $fixture->directory . '/signing.crt',
+            );
+            $store = new MariaDbTransactionStore($configuration, $this->clock);
+
+            // Either TLS negotiation or the explicit session guard must refuse the connection.
+            $this->expectException(RuntimeException::class);
+
+            $store->find('missing');
+        } finally {
+            $fixture->remove();
+        }
     }
 
     public function test_concurrent_processes_consume_a_result_exactly_once(): void
@@ -424,7 +471,7 @@ final class SqliteTransactionStoreTest extends TestCase
         $workers = [];
         for ($i = 0; $i < 8; $i++) {
             $process = proc_open(
-                [PHP_BINARY, dirname(__DIR__, 3) . '/Support/bin/consume-worker.php', $this->path(), 'race'],
+                [PHP_BINARY, dirname(__DIR__, 3) . '/Support/bin/consume-worker.php', 'race'],
                 [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
                 $pipes,
             );
@@ -453,14 +500,9 @@ final class SqliteTransactionStoreTest extends TestCase
         self::assertSame(TransactionState::Consumed, $this->store()->find('race')?->state);
     }
 
-    private function path(): string
+    private function store(): MariaDbTransactionStore
     {
-        return $this->directory . '/transactions.sqlite';
-    }
-
-    private function store(): SqliteTransactionStore
-    {
-        return new SqliteTransactionStore($this->path(), $this->clock);
+        return TestDatabase::store($this->clock);
     }
 
     private static function at(string $offset): DateTimeImmutable

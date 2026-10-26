@@ -11,7 +11,7 @@ services:
             - '../src/Kernel.php'
             - '../src/Core/Logging/'
             - '../src/Core/Transaction/'
-            - '../src/Core/Storage/SqliteTransactionStore.php'
+            - '../src/Core/Storage/MariaDbTransactionStore.php'
 
     JointIdentityProvider\Core\Transaction\TransactionStore:
         factory: ['@JointIdentityProvider\Core\Storage\TransactionStoreFactory', 'create']

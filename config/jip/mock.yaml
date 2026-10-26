@@ -74,7 +74,12 @@ binding:
   claim: dezi_nummer
 transactions:
   lifetime_seconds: 600
-  store: 'sqlite:var/jip/transactions.sqlite'   # the proof of concept's single-node store (design §13)
+  store:                              # the shared MariaDB 10.6 store (design §10, §13): devenv's jip-mariadb
+    host: jip-mariadb
+    port: 3306
+    database: jip
+    user: jip
+    password: '%env(JIP_DATABASE_PASSWORD)%'
 services:
   # mock assumption: the entity ID of the local test SP (jip-test-sp.dev.openconext.local).
   'https://jip-test-sp.dev.openconext.local/saml/metadata':

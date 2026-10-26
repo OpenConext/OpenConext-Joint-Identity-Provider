@@ -7,7 +7,7 @@ other. "DEZI" names only the external provider, its profile, its claims and attr
 mock that imitates it.
 
 This is the proof of concept. It contains the Symfony application, the configuration contract with
-its startup checks (§17), `GET /health`, the single-node transaction store, EngineBlock's start call
+its startup checks (§17), `GET /health`, the shared MariaDB transaction store, EngineBlock's start call
 `POST /authz` with the skip decision, the browser hand-off, the standard OIDC code flow, the DEZI
 profile (UserInfo decryption, envelope, statement and revocation checks), the account binding, the
 claim mapping and EngineBlock's result call `POST /attributes` (§4, §12–§17). A verified result or
@@ -44,8 +44,10 @@ Interfaces between the parts:
 
 ## Requirements
 
-PHP 8.5 with `openssl` and `gmp`, Composer 2, Symfony 7.4 and `web-token/jwt-library` 4.2 or later
-in the 4.x series.
+PHP 8.5 with `openssl`, `gmp` and `pdo_mysql` using mysqlnd, Composer 2, Symfony 7.4 and `web-token/jwt-library`
+4.2 or later in the 4.x series. MariaDB 10.6 for the transaction store (jip-dev's `jip-mariadb`
+service runs 10.6.24). Binary logging must be off, or `binlog_format` must be `ROW` or `MIXED`: the
+store uses `READ COMMITTED`, which InnoDB cannot write under statement-only binary logging.
 
 ## Getting started (mock)
 
@@ -54,13 +56,15 @@ composer install
 bin/init-mock-keys                                    # test keys under keys/mock/ (git-ignored)
 cp .env.local.dist .env.local                         # selects dev; fill in EB_API_TOKEN (>= 32 characters)
 bin/console jip:config:validate                       # the startup checks; exit 1 on any problem
+bin/console jip:store:init                            # create the table before serving requests
 php -S 127.0.0.1:8000 -t public public/index.php      # then: curl http://127.0.0.1:8000/health
 ```
 
 The committed default is `APP_ENV=prod`. The local override above explicitly selects `APP_ENV=dev`,
 which loads `.env.dev` and selects `config/jip/mock.yaml` and `CONNECTOR_ENVIRONMENT=mock`.
 In devconf the `jip` service gets the same values, with `EB_API_TOKEN` taken from `devenv/.env`
-(`JIP_SBS_API_TOKEN`).
+(`JIP_SBS_API_TOKEN`) and `JIP_DATABASE_PASSWORD` for the `jip-mariadb` service. `mock.yaml` names
+that service's host, which resolves only inside the Compose network.
 
 ## Configuration
 
@@ -69,6 +73,7 @@ In devconf the `jip` service gets the same values, with `EB_API_TOKEN` taken fro
 | `JIP_CONFIG_FILE` | The configuration file. A relative path resolves against the project directory. Not set in `.env`, so a deployment never falls back to the mock |
 | `CONNECTOR_ENVIRONMENT` | `mock`, `acceptance` or `production`. Must equal `environment` in the file (design §17). Not set in `.env` |
 | `EB_API_TOKEN` | EngineBlock's `sram.api_token`, referenced from the file as `'%env(EB_API_TOKEN)%'` |
+| `JIP_DATABASE_PASSWORD` | The store's database password, referenced from the committed files as `'%env(JIP_DATABASE_PASSWORD)%'` |
 
 The file implements the design's §17 contract, including `provider.profile: dezi` and the attribute
 identifiers, with the additional validation rules below. Each client also requires `redirect_uri`;
@@ -119,17 +124,35 @@ these DEZI contract points, so `provider` carries two profile-owned blocks:
 **Proof-of-concept limitations.** The revocation list is not supported: JIP refuses
 `revocation.mode: status_check_with_list`, `revocation.list_address`, and a `revocation_list` entry
 under `approved_key_addresses` or `expected_issuers`. Only `status_check` is used (design §15).
-`transactions.store` must be `sqlite:<path>` (relative to the project directory unless absolute):
-one SQLite file on one node, allowed only in the mock environment, as the proof of concept allows
-(§11, §13). Acceptance and production configuration is refused until a shared store is implemented.
-That store is an open dependency (§10); `acceptance.yaml.dist` keeps its placeholder.
-SQLite connections enable secure deletion, and every add or compare-and-set write prunes expired
-records. Cleanup depends on writes; it does not guarantee a retention limit during idle periods.
+`transactions.store` is a map of `host` (host name or IP address), `port`, `database` (letters,
+digits and underscores, at most 64), `user`, `password` and `tls_ca`: a MariaDB 10.6 database shared
+by every JIP node (§10, §13), in every environment. Use `127.0.0.1` for local TCP connections;
+`localhost` is refused because PDO would use a Unix socket and ignore `port`. Keep the port in
+`port`, not in `host`; colons are accepted only in a valid, unbracketed IPv6 address.
+`tls_ca` is an absolute path to a readable CA certificate file. It is required in acceptance and
+production, and optional in mock. When supplied, the connection verifies the server certificate
+and refuses an unencrypted session. Omitting it in mock permits plaintext database traffic; use
+this only on the isolated local development network.
+
+Before serving requests, run `bin/console jip:store:init` with a deployment account that has
+`CREATE` on the database. The command creates `jip_transactions` if absent and is safe to repeat;
+it does not migrate an existing table. Then configure the runtime account with only `SELECT`,
+`INSERT`, `UPDATE` and `DELETE`. Use a deployment configuration file or environment credentials
+for initialization; do not leave the deployment account in the web application's configuration.
+The local mock container runs this command after configuration validation using its development
+account. Runtime connections never execute schema DDL. Every add or compare-and-set write prunes
+expired records. Cleanup depends on writes; it does not guarantee a retention limit during idle periods.
 
 ## Transactions and `POST /authz`
 
-- **Store.** `Core\Storage\SqliteTransactionStore` runs every write in `BEGIN IMMEDIATE`, so the
-  compare-and-set reads, checks and replaces a record under one write lock, also across processes.
+- **Store.** `Core\Storage\MariaDbTransactionStore` reads a record with `SELECT … FOR UPDATE` and
+  replaces it in the same InnoDB transaction, so the compare-and-set holds a row lock across
+  processes and nodes. Connections use `READ COMMITTED`, strict SQL mode, server-side prepared
+  statements and 2-second limits for connecting, network reads, InnoDB row-lock waits,
+  metadata-lock waits and SQL statements. These limits apply per operation, not to a whole request;
+  multiple operations can accumulate. The mysqlnd read timeout is set when opening the connection
+  and the previous process setting is restored afterwards. Identifiers compare byte for byte
+  (`utf8mb4_nopad_bin`).
   `add()` accepts only `pending`, `skipped` or `failed`; replacements follow the §13 state diagram
   (`TransactionState::canMoveTo()`), keep the start fields and never extend a deadline. Records past
   their deadline are removed when a transaction is added; every endpoint treats them as expired.
@@ -158,12 +181,17 @@ records. Cleanup depends on writes; it does not guarantee a retention limit duri
 production configuration without a dated confirmation.
 
 **Health and the startup gate.** `GET /health` is the readiness check: `200
-{"status":"UP","certificates":"ok"}` when the configuration passes, with `certificates` set to
+{"status":"UP","certificates":"ok"}` when the configuration passes and the transaction table is reachable and readable,
+with `certificates` set to
 `expiring` or `expired` within `certificate_expiry_warning_days` (expiry does not stop JIP, design
-§14), and `503 {"status":"DOWN"}` otherwise. Requests are not gated by container health alone:
+§14), and `503 {"status":"DOWN"}` otherwise. The database check performs a read without fetching
+records or changing the store. It does not verify write privileges or replication health.
+Database error details and credentials are never returned. Requests are not gated by container health alone:
 
-- the container runs `jip:config:validate` as the web-server user before Apache starts and exits when
-  it fails (`devenv/jip/entrypoint.sh`; a production image must do the same);
+- the local mock container runs `jip:config:validate`, then `jip:store:init`, as the web-server user
+  before Apache starts and exits if either fails (`devenv/jip/entrypoint.sh`). Production must run
+  configuration validation before serving requests and initialize the schema separately with a
+  deployment account;
 - `Core\Http\ConfigurationGuard` answers `503` on every route except `/health` while the
   configuration fails a check, including on the authentication endpoints.
 
@@ -366,6 +394,9 @@ composer run dependency-audit  # dependency audit only, against composer.lock
 
 Configuration for PHP_CodeSniffer (PSR-12 plus the EngineBlock Slevomat rules) and PHPStan is in
 `ci/qa-config/`. `devenv/bin/check.sh` also runs `jip:config:validate` on the mock configuration.
+The tests need a MariaDB 10.6 database of their own: `JIP_TEST_DATABASE_*` in `.env.test` points at
+jip-dev's `jip-mariadb` (`127.0.0.1:13307`, database `jip_test`); override it in `.env.test.local`.
+Every store test drops and recreates the table in that database.
 The dependency audit needs network access to advisory sources. An unavailable advisory source is a
 failed check, not evidence that dependencies are safe. Run the checks after changes and before a
 demonstration; investigate reported advisories before continuing affected flows.

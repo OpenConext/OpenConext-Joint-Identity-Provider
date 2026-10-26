@@ -86,14 +86,9 @@ final class ConfigurationFixture
         ]);
 
         /** @var array<string, mixed> $configuration */
-        $configuration = self::with($configuration, ['transactions', 'store'], 'sqlite:' . $this->storePath());
+        $configuration = self::with($configuration, ['transactions', 'store'], TestDatabase::storeSettings());
 
         return $configuration;
-    }
-
-    public function storePath(): string
-    {
-        return $this->directory . '/transactions.sqlite';
     }
 
     /**

@@ -13,6 +13,11 @@ use DateTimeImmutable;
 interface TransactionStore
 {
     /**
+     * Throws when the store cannot be reached or its table cannot be read. Does not change records.
+     */
+    public function checkAvailability(): void;
+
+    /**
      * Stores a new transaction in an initial state (TransactionState::isInitial()). Returns false, and
      * stores nothing, when the ID or the log ID already exists.
      */

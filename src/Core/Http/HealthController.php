@@ -7,20 +7,23 @@ namespace JointIdentityProvider\Core\Http;
 use JointIdentityProvider\Core\Configuration\CertificateExpiryCheck;
 use JointIdentityProvider\Core\Configuration\ConfigurationLoader;
 use JointIdentityProvider\Core\Configuration\InvalidConfiguration;
+use JointIdentityProvider\Core\Storage\TransactionStoreFactory;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Throwable;
 
 /**
- * Operator monitoring (design §13). Reports whether the configuration passes the startup checks and the
- * certificate expiry status; never configuration values.
+ * Operator monitoring (design §13): configuration validity, certificate expiry and transaction table
+ * availability; never configuration values.
  */
 final readonly class HealthController
 {
     public function __construct(
         private ConfigurationLoader $loader,
         private CertificateExpiryCheck $certificateExpiry,
+        private TransactionStoreFactory $stores,
         private LoggerInterface $logger,
     ) {
     }
@@ -35,6 +38,17 @@ final readonly class HealthController
                 'JIP configuration is invalid; refusing to serve: {problems}',
                 ['problems' => implode('; ', $exception->errors)],
             );
+
+            return self::response(['status' => 'DOWN'], Response::HTTP_SERVICE_UNAVAILABLE);
+        }
+
+        try {
+            $this->stores->create()->checkAvailability();
+        } catch (Throwable $exception) {
+            // Database messages may contain credentials; log only the exception class.
+            $this->logger->error('JIP transaction store is unavailable ({exception_class})', [
+                'exception_class' => $exception::class,
+            ]);
 
             return self::response(['status' => 'DOWN'], Response::HTTP_SERVICE_UNAVAILABLE);
         }

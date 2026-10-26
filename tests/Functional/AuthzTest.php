@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace JointIdentityProvider\Tests\Functional;
 
-use JointIdentityProvider\Core\Storage\SqliteTransactionStore;
 use JointIdentityProvider\Core\Transaction\Transaction;
 use JointIdentityProvider\Core\Transaction\TransactionState;
 use JointIdentityProvider\Tests\Support\ConfigurationFixture as Fixture;
+use JointIdentityProvider\Tests\Support\TestDatabase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -26,6 +26,7 @@ final class AuthzTest extends WebTestCase
 
     protected function setUp(): void
     {
+        TestDatabase::reset();
         $this->fixture = new Fixture();
         Fixture::setEnv('EB_API_TOKEN', Fixture::API_TOKEN);
         Fixture::setEnv('CONNECTOR_ENVIRONMENT', 'mock');
@@ -129,7 +130,7 @@ final class AuthzTest extends WebTestCase
 
         self::assertResponseStatusCodeSame(401);
         self::assertSame('{"msg":"error"}', $this->client->getResponse()->getContent());
-        self::assertFileDoesNotExist($this->fixture->storePath());
+        self::assertSame(0, TestDatabase::rowCount());
     }
 
     /**
@@ -158,7 +159,7 @@ final class AuthzTest extends WebTestCase
 
         self::assertResponseStatusCodeSame(400);
         self::assertSame('{"msg":"error"}', $this->client->getResponse()->getContent());
-        self::assertFileDoesNotExist($this->fixture->storePath());
+        self::assertSame(0, TestDatabase::rowCount());
     }
 
     /**
@@ -215,7 +216,7 @@ final class AuthzTest extends WebTestCase
         );
 
         self::assertSame('interrupt', $body['msg']);
-        $database = (string) file_get_contents($this->fixture->storePath());
+        $database = TestDatabase::contents();
         self::assertStringContainsString('123456789', $database);
         foreach (['secret-mail', 'Secret Name', 'secret-eppn', 'secret-email', 'secret-subject', 'urn:mace:dir:attribute-def'] as $value) {
             self::assertStringNotContainsString($value, $database);
@@ -262,7 +263,7 @@ final class AuthzTest extends WebTestCase
         $nonce = $body['nonce'] ?? null;
         self::assertIsString($nonce);
         self::assertMatchesRegularExpression('/^[A-Za-z0-9_-]{43}$/', $nonce);
-        $transaction = new SqliteTransactionStore($this->fixture->storePath(), new NativeClock())->find($nonce);
+        $transaction = TestDatabase::store(new NativeClock())->find($nonce);
         self::assertNotNull($transaction);
 
         return $transaction;

@@ -34,11 +34,13 @@ final class ConfigurationLoaderTest extends TestCase
     {
         $this->fixture = new Fixture();
         Fixture::setEnv('EB_API_TOKEN', Fixture::API_TOKEN);
+        Fixture::setEnv('JIP_DATABASE_PASSWORD', 'database-password');
     }
 
     protected function tearDown(): void
     {
         Fixture::setEnv('EB_API_TOKEN', null);
+        Fixture::setEnv('JIP_DATABASE_PASSWORD', null);
         Fixture::setEnv('JIP_TEST_PLACEHOLDER', null);
         $this->fixture->remove();
     }
@@ -107,16 +109,16 @@ final class ConfigurationLoaderTest extends TestCase
 
         $errors = self::errorsOf(static fn () => $loader->load());
 
-        self::assertCount(16, $errors, implode("\n", $errors));
+        self::assertCount(19, $errors, implode("\n", $errors));
         foreach ($errors as $error) {
             self::assertMatchesRegularExpression('/(?:is an unreplaced placeholder|has an unreplaced placeholder as its key)\z/', $error);
         }
         self::assertContains('provider.approved_key_addresses.envelope: is an unreplaced placeholder', $errors);
         self::assertContains('provider.envelope.subject_association: is an unreplaced placeholder', $errors);
-        self::assertContains('transactions.store: is an unreplaced placeholder', $errors);
+        self::assertContains('transactions.store.host: is an unreplaced placeholder', $errors);
     }
 
-    public function test_the_filled_acceptance_template_is_refused_only_for_its_single_node_store(): void
+    public function test_the_filled_acceptance_template_passes(): void
     {
         $template = Yaml::parseFile(Fixture::projectDir() . '/config/jip/acceptance.yaml.dist');
         self::assertIsArray($template);
@@ -141,7 +143,10 @@ final class ConfigurationLoaderTest extends TestCase
             [['provider', 'clients', 'ggd', 'signing_key', 'private_key'], $this->fixture->directory . '/signing.pem'],
             [['provider', 'clients', 'ggd', 'decryption_keys', 0, 'certificate'], $this->fixture->directory . '/decryption.crt'],
             [['provider', 'clients', 'ggd', 'decryption_keys', 0, 'private_key'], $this->fixture->directory . '/decryption.pem'],
-            [['transactions', 'store'], 'sqlite:' . $this->fixture->storePath()],
+            [['transactions', 'store', 'host'], 'db.jip.example'],
+            [['transactions', 'store', 'database'], 'jip_acceptance'],
+            [['transactions', 'store', 'user'], 'jip_acceptance'],
+            [['transactions', 'store', 'tls_ca'], $this->fixture->directory . '/signing.crt'],
             [['services', 'https://app.ggd.example.nl/saml/metadata', 'connection_policy_version'], 'acceptance-1'],
             [['services', 'https://app.ggd.example.nl/saml/metadata', 'restart_login_url'], 'https://app.ggd.example.nl/login'],
         ];
@@ -156,10 +161,11 @@ final class ConfigurationLoaderTest extends TestCase
         }
         $path = $this->fixture->writeConfiguration($this->apply($template, $changes));
 
-        self::assertSame(
-            ['transactions.store: must be a shared store outside the mock environment'],
-            self::errorsOf(static fn () => Fixture::loader($path, 'acceptance')->load()),
-        );
+        $store = Fixture::loader($path, 'acceptance')->load()->transactions->store;
+
+        self::assertSame('mysql:host=db.jip.example;port=3306;dbname=jip_acceptance;charset=utf8mb4', $store->dsn());
+        self::assertSame('jip_acceptance', $store->user);
+        self::assertSame('database-password', $store->password);
     }
 
     public function test_the_acceptance_template_holds_no_mock_assumption(): void
@@ -240,10 +246,21 @@ final class ConfigurationLoaderTest extends TestCase
                 self::assertNull($c->provider->oidc->authorization->maxAge);
             },
         ];
-        yield 'a relative sqlite store path' => [
-            [[['transactions', 'store'], 'sqlite:var/jip/transactions.sqlite']],
+        yield 'a store on an IPv6 address' => [
+            [[['transactions', 'store', 'host'], '2001:db8::1']],
             static function (JipConfiguration $c): void {
-                self::assertSame('var/jip/transactions.sqlite', $c->transactions->sqlitePath());
+                self::assertSame('2001:db8::1', $c->transactions->store->host);
+                self::assertStringContainsString('host=2001:db8::1;', $c->transactions->store->dsn());
+            },
+        ];
+        yield 'a store on an IP address and the highest port' => [
+            [
+                [['transactions', 'store', 'host'], '10.0.0.5'],
+                [['transactions', 'store', 'port'], 65535],
+                [['transactions', 'store', 'database'], 'jip'],
+            ],
+            static function (JipConfiguration $c): void {
+                self::assertSame('mysql:host=10.0.0.5;port=65535;dbname=jip;charset=utf8mb4', $c->transactions->store->dsn());
             },
         ];
     }
@@ -274,15 +291,74 @@ final class ConfigurationLoaderTest extends TestCase
             '<shared store with atomic operations>',
             'transactions.store: is an unreplaced placeholder',
         ];
-        yield 'a store that is not sqlite' => [
+        yield 'a store given as a DSN string' => [
             ['transactions', 'store'],
-            'single-node',
-            'transactions.store: must be sqlite: followed by a database path (the single-node store)',
+            'sqlite:var/jip/transactions.sqlite',
+            'transactions.store: must be a map',
         ];
-        yield 'a sqlite store without a path' => [
-            ['transactions', 'store'],
-            'sqlite: ',
-            'transactions.store: must be sqlite: followed by a database path (the single-node store)',
+        yield 'an unknown store setting' => [
+            ['transactions', 'store', 'dsn'],
+            'mysql:host=db',
+            'transactions.store.dsn: is not a known setting',
+        ];
+        yield 'a store host with DSN syntax' => [
+            ['transactions', 'store', 'host'],
+            'db;dbname=other',
+            'transactions.store.host: must be a host name or IP address',
+        ];
+        foreach (['db:3307', 'db.example:3307', '127.0.0.1:3307', '2001:db8:::1'] as $host) {
+            yield 'invalid store host ' . $host => [
+                ['transactions', 'store', 'host'],
+                $host,
+                'transactions.store.host: must be a host name or IP address',
+            ];
+        }
+        foreach (['localhost', 'LOCALHOST'] as $host) {
+            yield 'socket store host ' . $host => [
+                ['transactions', 'store', 'host'],
+                $host,
+                'transactions.store.host: use 127.0.0.1 for a local TCP connection instead of localhost',
+            ];
+        }
+        yield 'a relative store CA path' => [
+            ['transactions', 'store', 'tls_ca'],
+            'keys/ca.pem',
+            'transactions.store.tls_ca: must be an absolute path to a readable CA certificate file',
+        ];
+        yield 'a missing store CA file' => [
+            ['transactions', 'store', 'tls_ca'],
+            '/nonexistent-jip-ca-directory/ca.pem',
+            'transactions.store.tls_ca: must be an absolute path to a readable CA certificate file',
+        ];
+        yield 'a store port above 65535' => [
+            ['transactions', 'store', 'port'],
+            65536,
+            'transactions.store.port: must be a port number up to 65535',
+        ];
+        yield 'a store port as a string' => [
+            ['transactions', 'store', 'port'],
+            '3306',
+            'transactions.store.port: must be a positive integer',
+        ];
+        yield 'a store database with DSN syntax' => [
+            ['transactions', 'store', 'database'],
+            'jip;host=other',
+            'transactions.store.database: must be at most 64 letters, digits or underscores',
+        ];
+        yield 'a store database name over 64 characters' => [
+            ['transactions', 'store', 'database'],
+            str_repeat('a', 65),
+            'transactions.store.database: must be at most 64 letters, digits or underscores',
+        ];
+        yield 'an empty store user' => [
+            ['transactions', 'store', 'user'],
+            ' ',
+            'transactions.store.user: must be a non-empty string',
+        ];
+        yield 'a store without a password' => [
+            ['transactions', 'store', 'password'],
+            Fixture::ABSENT,
+            'transactions.store.password: is missing',
         ];
         yield 'placeholder inside a value' => [
             ['provider', 'issuer'],
@@ -687,21 +763,31 @@ final class ConfigurationLoaderTest extends TestCase
     /**
      * @return iterable<string, array{Environment}>
      */
-    public static function sharedStoreEnvironments(): iterable
+    public static function deployedEnvironments(): iterable
     {
         yield 'acceptance' => [Environment::Acceptance];
         yield 'production' => [Environment::Production];
     }
 
-    #[DataProvider('sharedStoreEnvironments')]
-    public function test_sqlite_is_refused_outside_mock(Environment $environment): void
+    #[DataProvider('deployedEnvironments')]
+    public function test_a_deployed_store_requires_a_ca_file(Environment $environment): void
     {
         $configuration = Fixture::with($this->fixture->mockConfiguration(), ['environment'], $environment->value);
         $file = $this->fixture->writeConfiguration($configuration);
 
         $errors = self::errorsOf(static fn () => Fixture::loader($file, $environment->value)->load());
 
-        self::assertSame(['transactions.store: must be a shared store outside the mock environment'], $errors);
+        self::assertSame(['transactions.store.tls_ca: is missing'], $errors);
+    }
+
+    #[DataProvider('deployedEnvironments')]
+    public function test_the_shared_store_is_accepted_outside_mock(Environment $environment): void
+    {
+        $configuration = Fixture::with($this->fixture->mockConfiguration(), ['environment'], $environment->value);
+        $configuration = Fixture::with($configuration, ['transactions', 'store', 'tls_ca'], $this->fixture->directory . '/signing.crt');
+        $file = $this->fixture->writeConfiguration($configuration);
+
+        self::assertSame($environment, Fixture::loader($file, $environment->value)->load()->environment);
     }
 
     public function test_environment_must_equal_connector_environment(): void

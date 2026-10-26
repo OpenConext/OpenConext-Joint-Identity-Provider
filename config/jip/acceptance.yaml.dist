@@ -78,7 +78,13 @@ binding:
   claim: dezi_nummer
 transactions:
   lifetime_seconds: 600
-  store: '<shared store with atomic operations>'
+  store:                              # MariaDB 10.6, shared by every JIP node (design §10, §13)
+    host: '<MariaDB host>'
+    port: 3306
+    database: '<database name>'
+    user: '<database user>'
+    password: '%env(JIP_DATABASE_PASSWORD)%'
+    tls_ca: '<absolute path to the MariaDB CA certificate>'
 services:
   '<approved service entity ID>':
     client: ggd

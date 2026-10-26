@@ -6,10 +6,10 @@ namespace JointIdentityProvider\Tests\Functional;
 
 use Closure;
 use JointIdentityProvider\Core\Logging\LineLogger;
-use JointIdentityProvider\Core\Storage\SqliteTransactionStore;
 use JointIdentityProvider\Core\Transaction\Transaction;
 use JointIdentityProvider\Core\Transaction\TransactionState;
 use JointIdentityProvider\Tests\Support\ConfigurationFixture as Fixture;
+use JointIdentityProvider\Tests\Support\TestDatabase;
 use JointIdentityProvider\Tests\Support\TestProvider;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
@@ -43,6 +43,7 @@ final class AttributesTest extends WebTestCase
     protected function setUp(): void
     {
         self::mockTime();
+        TestDatabase::reset();
         $this->fixture = new Fixture();
         Fixture::setEnv('EB_API_TOKEN', Fixture::API_TOKEN);
         Fixture::setEnv('CONNECTOR_ENVIRONMENT', 'mock');
@@ -616,6 +617,6 @@ final class AttributesTest extends WebTestCase
 
     private function storedOrNull(string $id): ?Transaction
     {
-        return new SqliteTransactionStore($this->fixture->storePath(), new NativeClock())->find($id);
+        return TestDatabase::store(new NativeClock())->find($id);
     }
 }

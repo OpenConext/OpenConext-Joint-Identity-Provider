@@ -8,6 +8,8 @@
         "ext-gmp": "*",
         "ext-iconv": "*",
         "ext-openssl": "*",
+        "ext-pdo": "*",
+        "ext-pdo_mysql": "*",
         "psr/log": "^3.0",
         "symfony/clock": "7.4.*",
         "symfony/console": "7.4.*",
