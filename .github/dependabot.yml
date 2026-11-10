@@ -1,0 +1,30 @@
+version: 2
+
+updates:
+  - package-ecosystem: composer
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '08:00'
+      timezone: Europe/Warsaw
+    # Keep the Symfony LTS line and other intentional constraints in composer.json.
+    versioning-strategy: lockfile-only
+    open-pull-requests-limit: 5
+    groups:
+      symfony:
+        patterns:
+          - 'symfony/*'
+      symfony-security:
+        applies-to: security-updates
+        patterns:
+          - 'symfony/*'
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '08:00'
+      timezone: Europe/Warsaw
+    open-pull-requests-limit: 5

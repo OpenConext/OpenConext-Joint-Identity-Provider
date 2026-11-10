@@ -397,6 +397,19 @@ Configuration for PHP_CodeSniffer (PSR-12 plus the EngineBlock Slevomat rules) a
 The tests need a MariaDB 10.6 database of their own: `JIP_TEST_DATABASE_*` in `.env.test` points at
 jip-dev's `jip-mariadb` (`127.0.0.1:13307`, database `jip_test`); override it in `.env.test.local`.
 Every store test drops and recreates the table in that database.
+
+GitHub Actions runs the existing `composer check` suite on pull requests, pushes to `main`, and
+every Monday, and supports manual runs. It validates the manifest and lockfile and checks installed
+platform requirements. The runner uses PHP 8.5 and Ubuntu 22.04's native MariaDB 10.6 package, with
+a dedicated test database; no service container is needed.
+
+Dependabot checks Composer dependencies and GitHub Actions every Monday at 08:00 Europe/Warsaw.
+Composer updates stay within the constraints in `composer.json`, including Symfony 7.4; Symfony
+version updates and security updates each have their own group. Enable Dependabot alerts and
+security updates in the repository's GitHub settings so advisory-driven pull requests can run
+independently of the weekly version-update schedule. These files take effect once published to
+GitHub; version-update scheduling requires the configuration on the default branch.
+
 The dependency audit needs network access to advisory sources. An unavailable advisory source is a
 failed check, not evidence that dependencies are safe. Run the checks after changes and before a
 demonstration; investigate reported advisories before continuing affected flows.
@@ -425,6 +438,7 @@ data. Deferred controls remain open findings, not passed requirements.
 - Production artifact verification is deferred. Source-control metadata must remain inaccessible
   over HTTP in any hosted PoC; production packaging must omit it or make it inaccessible both to
   external callers and to the application. The `public/` document root alone does not prove this.
-- `composer check` audits locked dependencies. Formal risk-based remediation deadlines, a routine
-  update cadence, an operational owner and an exception process remain deferred. A clean audit does
-  not establish compliance with dependency update deadlines.
+- `composer check` audits locked dependencies, including in the weekly CI run. Dependabot provides
+  the routine update cadence. Formal risk-based remediation deadlines, an operational owner and an
+  exception process remain deferred. A clean audit does not establish compliance with dependency
+  update deadlines.

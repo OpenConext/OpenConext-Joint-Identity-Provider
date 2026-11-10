@@ -1,0 +1,65 @@
+name: Quality checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 7 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Composer check (PHP 8.5, MariaDB 10.6)
+    # Ubuntu 22.04 provides MariaDB 10.6 without creating a service container.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      APP_ENV: test
+      JIP_TEST_DATABASE_HOST: 127.0.0.1
+      JIP_TEST_DATABASE_PORT: '3306'
+      JIP_TEST_DATABASE_NAME: jip_test
+      JIP_TEST_DATABASE_USER: jip_test
+      JIP_TEST_DATABASE_PASSWORD: jip_test
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.5'
+          extensions: ctype, dom, gmp, iconv, mbstring, openssl, pdo_mysql, xml, xmlwriter
+          tools: composer:v2
+          coverage: none
+        env:
+          fail-fast: 'true'
+
+      - name: Prepare test database
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes mariadb-server
+          sudo systemctl start mariadb
+          sudo mariadb <<'SQL'
+          CREATE DATABASE jip_test CHARACTER SET utf8mb4 COLLATE utf8mb4_nopad_bin;
+          CREATE USER 'jip_test'@'127.0.0.1' IDENTIFIED BY 'jip_test';
+          GRANT ALL PRIVILEGES ON jip_test.* TO 'jip_test'@'127.0.0.1';
+          SQL
+
+      - name: Validate Composer manifest and lockfile
+        run: composer validate --strict --no-check-publish
+
+      - name: Install locked dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Check installed platform requirements
+        run: composer check-platform-reqs
+
+      - name: Run existing quality checks and dependency audit
+        run: composer check
