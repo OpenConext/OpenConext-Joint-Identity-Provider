@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace JointIdentityProvider\Oidc\IdToken;
 
 use DateTimeImmutable;
-use JointIdentityProvider\Core\Configuration\ProviderConfiguration;
 use JointIdentityProvider\Oidc\Configuration\ClientConfiguration;
+use JointIdentityProvider\Oidc\Configuration\TrustSettings;
 use JointIdentityProvider\Oidc\Jose\SignedMessageVerifier;
 use JointIdentityProvider\Oidc\OidcFailure;
 use JointIdentityProvider\Oidc\OidcFailureType;
@@ -31,19 +31,19 @@ final readonly class IdTokenValidator
      */
     public function validate(
         #[SensitiveParameter] string $idToken,
-        ProviderConfiguration $provider,
+        TrustSettings $trust,
         ClientConfiguration $client,
         #[SensitiveParameter] string $expectedNonce,
         DateTimeImmutable $attemptStartedAt,
     ): IdTokenClaims {
         $claims = $this->verifier->verify(
             $idToken,
-            $provider,
-            ProviderConfiguration::ID_TOKEN,
+            $trust,
+            TrustSettings::ID_TOKEN,
             OidcFailureType::IdTokenInvalid,
         )->claims;
 
-        if (($claims['iss'] ?? null) !== $provider->expectedIssuers[ProviderConfiguration::ID_TOKEN]) {
+        if (($claims['iss'] ?? null) !== $trust->expectedIssuers[TrustSettings::ID_TOKEN]) {
             throw self::invalid('iss differs from provider.expected_issuers.id_token');
         }
 
@@ -69,7 +69,7 @@ final readonly class IdTokenValidator
         $expiresAt = self::numericDate($claims, 'exp');
         $authTime = self::numericDate($claims, 'auth_time');
         $now = (float) $this->clock->now()->format('U.u');
-        $skew = $provider->clockSkewSeconds;
+        $skew = $trust->clockSkewSeconds;
 
         if ($expiresAt <= $now - $skew) {
             throw self::invalid('exp has passed');

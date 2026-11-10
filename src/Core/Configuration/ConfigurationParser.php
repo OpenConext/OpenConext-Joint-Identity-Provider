@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace JointIdentityProvider\Core\Configuration;
 
-use JointIdentityProvider\Core\Configuration\Reader\ConfigNode;
-use JointIdentityProvider\Core\Configuration\Reader\ConfigurationErrors;
+use JointIdentityProvider\Configuration\Reader\ConfigNode;
+use JointIdentityProvider\Configuration\Reader\ConfigurationErrors;
 use JointIdentityProvider\Core\Profile\ProfileConfiguration;
 use JointIdentityProvider\Core\Profile\ProfileRegistry;
 use JointIdentityProvider\Core\Profile\ProviderProfile;
 use JointIdentityProvider\Oidc\Configuration\OidcConfigurationParser;
+use JointIdentityProvider\Oidc\Configuration\TrustSettings;
 
 /**
  * Turns the parsed configuration tree into a JipConfiguration and runs the startup checks of design §17.
@@ -186,7 +187,7 @@ final readonly class ConfigurationParser
                 ...OidcConfigurationParser::PROVIDER_KEYS,
                 ...$profile->providerKeys(),
             );
-            $messageTypes = [ProviderConfiguration::ID_TOKEN, ...$profile->messageTypes()];
+            $messageTypes = [TrustSettings::ID_TOKEN, ...$profile->messageTypes()];
         }
 
         $keyAddresses = $this->parseTrustAnchors($node->get('approved_key_addresses'), $messageTypes, true);
@@ -209,11 +210,7 @@ final readonly class ConfigurationParser
         return new ProviderConfiguration(
             $profile->name(),
             $oidc,
-            $keyAddresses,
-            $issuers,
-            $clockSkew,
-            $keyCache,
-            $keyRefetch,
+            new TrustSettings($keyAddresses, $issuers, $clockSkew, $keyCache, $keyRefetch),
             $expiryWarning,
             $profileConfiguration,
         );

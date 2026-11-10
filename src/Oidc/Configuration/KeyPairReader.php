@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace JointIdentityProvider\Oidc\Configuration;
 
 use DateTimeImmutable;
-use JointIdentityProvider\Core\Configuration\Reader\ConfigNode;
+use JointIdentityProvider\Configuration\Reader\ConfigNode;
 use OpenSSLAsymmetricKey;
 use OpenSSLCertificate;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;

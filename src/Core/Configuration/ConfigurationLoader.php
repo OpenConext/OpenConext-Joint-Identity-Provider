@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace JointIdentityProvider\Core\Configuration;
 
-use JointIdentityProvider\Core\Configuration\Reader\ConfigNode;
-use JointIdentityProvider\Core\Configuration\Reader\ConfigurationErrors;
+use JointIdentityProvider\Configuration\Reader\ConfigNode;
+use JointIdentityProvider\Configuration\Reader\ConfigurationErrors;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\Yaml\Exception\ParseException;

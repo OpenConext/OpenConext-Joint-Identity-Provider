@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace JointIdentityProvider\Oidc\Keys;
 
-use JointIdentityProvider\Core\Configuration\ProviderConfiguration;
 use JointIdentityProvider\Oidc\Cache\ProviderCache;
+use JointIdentityProvider\Oidc\Configuration\TrustSettings;
 use JointIdentityProvider\Oidc\Http\NoAnswer;
 use JointIdentityProvider\Oidc\Http\ProviderHttpClient;
 use JointIdentityProvider\Oidc\OidcFailure;
@@ -33,27 +33,27 @@ final readonly class KeyResolver
     /**
      * @throws OidcFailure
      */
-    public function key(ProviderConfiguration $provider, string $messageType, string $kid): JWK
+    public function key(TrustSettings $trust, string $messageType, string $kid): JWK
     {
-        $address = $provider->approvedKeyAddresses[$messageType]
+        $address = $trust->approvedKeyAddresses[$messageType]
             ?? throw new LogicException('The message type has no approved key address.');
 
         $result = $this->cache->update(
             'jwks ' . $address,
-            function (?array $entry) use ($provider, $messageType, $address, $kid): array {
+            function (?array $entry) use ($trust, $messageType, $address, $kid): array {
                 $now = (float) $this->clock->now()->format('U.u');
                 $fetchedAt = self::number($entry['fetched_at'] ?? null);
                 $lastAttemptAt = self::number($entry['last_attempt_at'] ?? null) ?? $fetchedAt;
                 $keys = self::keptKeys($entry['keys'] ?? null);
                 $fresh = $fetchedAt !== null && $keys !== null
-                    && $now >= $fetchedAt && $now < $fetchedAt + $provider->keyCacheSeconds;
+                    && $now >= $fetchedAt && $now < $fetchedAt + $trust->keyCacheSeconds;
 
                 if ($fresh && isset($keys[$kid])) {
                     return [null, new JWK($keys[$kid])];
                 }
                 if (
                     $lastAttemptAt !== null && $now >= $lastAttemptAt
-                    && $now < $lastAttemptAt + $provider->keyRefetchMinIntervalSeconds
+                    && $now < $lastAttemptAt + $trust->keyRefetchMinIntervalSeconds
                     && ($fresh || isset($entry['last_fetch_failure']))
                 ) {
                     $failure = match ($entry['last_fetch_failure'] ?? null) {

@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace JointIdentityProvider\Tests\Support;
 
 use DateTimeImmutable;
+use JointIdentityProvider\Configuration\Reader\ConfigNode;
 use JointIdentityProvider\Core\Configuration\ProviderConfiguration;
-use JointIdentityProvider\Core\Configuration\Reader\ConfigNode;
 use JointIdentityProvider\Core\Profile\ProfileConfiguration;
 use JointIdentityProvider\Core\Profile\ProfileOutcome;
 use JointIdentityProvider\Core\Profile\ProfileResult;

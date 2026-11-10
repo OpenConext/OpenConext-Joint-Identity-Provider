@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace JointIdentityProvider\Core\Configuration\Reader;
+namespace JointIdentityProvider\Configuration\Reader;
 
 /**
  * A path-aware view on one value of the parsed configuration. Every accessor validates the value,

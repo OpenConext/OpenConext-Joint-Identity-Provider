@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace JointIdentityProvider\Core\Configuration\Reader;
+namespace JointIdentityProvider\Configuration\Reader;
 
 /**
  * Collects every configuration problem so one run reports all of them.

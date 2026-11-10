@@ -107,7 +107,8 @@ final readonly class InterruptController
 
         try {
             $url = $this->oidc->authorizationUrl(
-                $configuration->provider,
+                $configuration->provider->oidc,
+                $configuration->provider->trust,
                 $client,
                 $attempt->oidcState,
                 $attempt->oidcNonce,

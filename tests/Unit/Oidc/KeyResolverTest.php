@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace JointIdentityProvider\Tests\Unit\Oidc;
 
-use JointIdentityProvider\Core\Configuration\ProviderConfiguration;
+use JointIdentityProvider\Oidc\Configuration\TrustSettings;
 use JointIdentityProvider\Oidc\OidcFailure;
 use JointIdentityProvider\Oidc\OidcFailureType;
 use JointIdentityProvider\Tests\Support\OidcFixture;
@@ -20,12 +20,12 @@ use Symfony\Component\HttpClient\Response\MockResponse;
 final class KeyResolverTest extends TestCase
 {
     private OidcFixture $oidc;
-    private ProviderConfiguration $provider;
+    private TrustSettings $provider;
 
     protected function setUp(): void
     {
         $this->oidc = new OidcFixture();
-        $this->provider = $this->oidc->configuration()->provider;
+        $this->provider = $this->oidc->configuration()->provider->trust;
     }
 
     protected function tearDown(): void

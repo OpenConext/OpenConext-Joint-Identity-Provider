@@ -144,7 +144,8 @@ final readonly class CallbackController
 
         try {
             $login = $this->oidc->completeLogin(
-                $configuration->provider,
+                $configuration->provider->oidc,
+                $configuration->provider->trust,
                 $client,
                 $code,
                 $attempt->pkceVerifier,

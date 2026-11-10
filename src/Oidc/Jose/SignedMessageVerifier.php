@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace JointIdentityProvider\Oidc\Jose;
 
 use InvalidArgumentException;
-use JointIdentityProvider\Core\Configuration\ProviderConfiguration;
+use JointIdentityProvider\Oidc\Configuration\TrustSettings;
 use JointIdentityProvider\Oidc\Keys\KeyResolver;
 use JointIdentityProvider\Oidc\OidcFailure;
 use JointIdentityProvider\Oidc\OidcFailureType;
@@ -35,7 +35,7 @@ final readonly class SignedMessageVerifier
      */
     public function verify(
         string $compact,
-        ProviderConfiguration $provider,
+        TrustSettings $trust,
         string $messageType,
         OidcFailureType $invalid,
     ): VerifiedMessage {
@@ -63,7 +63,7 @@ final readonly class SignedMessageVerifier
         }
         if (
             array_key_exists('jku', $header)
-            && $header['jku'] !== ($provider->approvedKeyAddresses[$messageType] ?? null)
+            && $header['jku'] !== ($trust->approvedKeyAddresses[$messageType] ?? null)
         ) {
             throw new OidcFailure($invalid, $messageType . ': jku is not the approved key address');
         }
@@ -73,7 +73,7 @@ final readonly class SignedMessageVerifier
             throw new OidcFailure($invalid, $messageType . ': payload is not a JSON object');
         }
 
-        $key = $this->keys->key($provider, $messageType, $kid);
+        $key = $this->keys->key($trust, $messageType, $kid);
 
         try {
             $verified = new JWSVerifier(new AlgorithmManager([new RS256()]))->verifyWithKey($jws, $key, 0);

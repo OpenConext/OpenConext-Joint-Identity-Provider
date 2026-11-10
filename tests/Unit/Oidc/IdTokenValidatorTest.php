@@ -198,7 +198,7 @@ final class IdTokenValidatorTest extends TestCase
     {
         return $this->oidc->idTokens()->validate(
             $token,
-            $this->configuration->provider,
+            $this->configuration->provider->trust,
             $this->configuration->provider->oidc->clients['ggd'],
             self::NONCE,
             $this->attemptStart,

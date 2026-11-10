@@ -1,0 +1,42 @@
+deptrac:
+    paths:
+        - ../../src
+
+    analyser:
+        types:
+            - class
+            - use
+
+    layers:
+        - name: Configuration
+          collectors:
+              - type: classLike
+                value: ^JointIdentityProvider\\Configuration\\
+        - name: Oidc
+          collectors:
+              - type: classLike
+                value: ^JointIdentityProvider\\Oidc\\
+        - name: Core
+          collectors:
+              - type: classLike
+                value: ^JointIdentityProvider\\Core\\
+        - name: Profile
+          collectors:
+              - type: classLike
+                value: ^JointIdentityProvider\\Profile\\
+        - name: Kernel
+          collectors:
+              - type: classLike
+                value: ^JointIdentityProvider\\Kernel$
+        - name: External
+          collectors:
+              - type: classLike
+                value: ^(?!JointIdentityProvider\\)
+
+    ruleset:
+        Configuration: []
+        Oidc: [Configuration, External]
+        Core: [Configuration, Oidc, External]
+        Profile: [Configuration, Core, Oidc, External]
+        Kernel: [External]
+        External: []

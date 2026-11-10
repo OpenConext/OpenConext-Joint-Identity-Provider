@@ -390,12 +390,14 @@ Private keys and certificates never enter version control: `keys/`, `*.pem`, `*.
 ## Quality checks
 
 ```bash
-APP_ENV=test composer check  # lint:yaml, lint:container, phpcs, phpstan (level max), phpunit, dependency audit
+APP_ENV=test composer check  # lint:yaml, lint:container, phpcs, phpstan (level max), deptrac, phpunit, dependency audit
 composer run dependency-audit  # dependency audit only, against composer.lock
 ```
 
 Configuration for PHP_CodeSniffer (PSR-12 plus the EngineBlock Slevomat rules) and PHPStan is in
 `ci/qa-config/`. `devenv/bin/check.sh` also runs `jip:config:validate` on the mock configuration.
+Deptrac enforces the dependency direction: Core may use Oidc, profiles may use both, and the shared
+configuration readers depend on neither. Oidc must not depend on Core or profiles.
 The tests need a MariaDB 10.6 database of their own: `JIP_TEST_DATABASE_*` in `.env.test` points at
 jip-dev's `jip-mariadb` (`127.0.0.1:13307`, database `jip_test`); override it in `.env.test.local`.
 Every store test drops and recreates the table in that database.

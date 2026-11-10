@@ -22,6 +22,7 @@
         "web-token/jwt-library": "^4.2"
     },
     "require-dev": {
+        "deptrac/deptrac": "^4.7",
         "phpstan/phpstan": "^2.1",
         "phpstan/phpstan-phpunit": "^2.0",
         "phpstan/phpstan-strict-rules": "^2.0",
@@ -64,6 +65,7 @@
             "@lint",
             "@phpcs",
             "@phpstan",
+            "@deptrac",
             "@phpunit",
             "@dependency-audit"
         ],
@@ -73,6 +75,7 @@
         ],
         "phpcs": "phpcs --standard=ci/qa-config/phpcs.xml",
         "phpstan": "phpstan analyse --configuration=ci/qa-config/phpstan.neon --no-progress",
+        "deptrac": "deptrac analyse --config-file=ci/qa-config/deptrac.yaml --cache-file=var/cache/deptrac.cache --no-progress --fail-on-uncovered",
         "phpunit": "phpunit",
         "dependency-audit": "@composer audit --locked --no-interaction",
         "auto-scripts": {

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace JointIdentityProvider\Oidc\Configuration;
 
-use JointIdentityProvider\Core\Configuration\Reader\ConfigNode;
+use JointIdentityProvider\Configuration\Reader\ConfigNode;
 
 /**
  * Validates `provider.issuer`, `provider.authorization` and `provider.clients` (design §14, §17).

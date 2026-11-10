@@ -58,7 +58,7 @@ final readonly class ProofValidator
         DateTimeImmutable $now,
     ): VerifiedProof {
         $nowSeconds = (float) $now->format('U.u');
-        $skew = $provider->clockSkewSeconds;
+        $skew = $provider->trust->clockSkewSeconds;
 
         $envelope = $this->verify($envelopeJws, $provider, self::ENVELOPE, DeziFailureType::EnvelopeInvalid)->claims;
         $envelopeFailure = static fn (string $detail): DeziFailure => new DeziFailure(
@@ -66,7 +66,7 @@ final readonly class ProofValidator
             'envelope: ' . $detail,
         );
 
-        if (($envelope['iss'] ?? null) !== $provider->expectedIssuers[self::ENVELOPE]) {
+        if (($envelope['iss'] ?? null) !== $provider->trust->expectedIssuers[self::ENVELOPE]) {
             throw $envelopeFailure('iss differs from provider.expected_issuers.envelope');
         }
         $audience = $configuration->envelopeAudiences[$login->client->name]
@@ -109,10 +109,10 @@ final readonly class ProofValidator
             'statement: ' . $detail,
         );
 
-        if (($statementMessage->header['jku'] ?? null) !== $provider->approvedKeyAddresses[self::STATEMENT]) {
+        if (($statementMessage->header['jku'] ?? null) !== $provider->trust->approvedKeyAddresses[self::STATEMENT]) {
             throw $statementFailure('jku is not the approved key address');
         }
-        if (($statement['iss'] ?? null) !== $provider->expectedIssuers[self::STATEMENT]) {
+        if (($statement['iss'] ?? null) !== $provider->trust->expectedIssuers[self::STATEMENT]) {
             throw $statementFailure('iss differs from provider.expected_issuers.statement');
         }
         $notBefore = self::time($statement, 'nbf', $statementFailure);
@@ -151,7 +151,7 @@ final readonly class ProofValidator
         DeziFailureType $invalid,
     ): VerifiedMessage {
         try {
-            return $this->verifier->verify($compact, $provider, $messageType, OidcFailureType::MessageInvalid);
+            return $this->verifier->verify($compact, $provider->trust, $messageType, OidcFailureType::MessageInvalid);
         } catch (OidcFailure $failure) {
             if ($failure->type === OidcFailureType::MessageInvalid) {
                 throw new DeziFailure($invalid, $failure->detail, $failure);

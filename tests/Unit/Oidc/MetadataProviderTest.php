@@ -33,15 +33,15 @@ final class MetadataProviderTest extends TestCase
     {
         $provider = $this->oidc->configuration()->provider;
 
-        $metadata = $this->oidc->metadata()->load($provider);
-        $this->oidc->metadata()->load($provider);
+        $metadata = $this->oidc->metadata()->load($provider->oidc, $provider->trust);
+        $this->oidc->metadata()->load($provider->oidc, $provider->trust);
 
         self::assertSame(TestProvider::AUTHORIZE, $metadata->authorizationEndpoint);
         self::assertSame(TestProvider::TOKEN, $metadata->tokenEndpoint);
         self::assertSame([TestProvider::DISCOVERY], array_column($this->oidc->provider->requests, 'url'));
 
         $this->oidc->clock->sleep(3600);
-        $this->oidc->metadata()->load($provider);
+        $this->oidc->metadata()->load($provider->oidc, $provider->trust);
         self::assertSame(2, $this->oidc->provider->countRequests([TestProvider::DISCOVERY]));
     }
 
@@ -77,14 +77,15 @@ final class MetadataProviderTest extends TestCase
 
     public function test_kept_metadata_is_checked_again_against_the_current_configuration(): void
     {
-        $this->oidc->metadata()->load($this->oidc->configuration()->provider);
+        $provider = $this->oidc->configuration()->provider;
+        $this->oidc->metadata()->load($provider->oidc, $provider->trust);
         $changed = $this->oidc->configuration([
             [['provider', 'approved_key_addresses', 'id_token'], 'https://mock-dezi.dev.openconext.local/other-jwks.json'],
         ]);
 
         $this->expectException(OidcFailure::class);
         try {
-            $this->oidc->metadata()->load($changed->provider);
+            $this->oidc->metadata()->load($changed->provider->oidc, $changed->provider->trust);
         } finally {
             self::assertSame(2, $this->oidc->provider->countRequests([TestProvider::DISCOVERY]));
         }
@@ -113,7 +114,8 @@ final class MetadataProviderTest extends TestCase
     {
         unset($this->oidc->provider->discovery['token_endpoint_auth_methods_supported']);
 
-        $metadata = $this->oidc->metadata()->load($this->oidc->configuration()->provider);
+        $provider = $this->oidc->configuration()->provider;
+        $metadata = $this->oidc->metadata()->load($provider->oidc, $provider->trust);
 
         self::assertSame([], $metadata->tokenEndpointAuthMethods);
     }
@@ -124,7 +126,7 @@ final class MetadataProviderTest extends TestCase
         $provider = $this->oidc->configuration()->provider;
         $initialFetches = 0;
         if ($expired) {
-            $this->oidc->metadata()->load($provider);
+            $this->oidc->metadata()->load($provider->oidc, $provider->trust);
             $this->oidc->clock->sleep(3600);
             $initialFetches = 1;
         }
@@ -141,7 +143,7 @@ final class MetadataProviderTest extends TestCase
         self::assertSame($initialFetches + 1, $this->oidc->provider->countRequests([TestProvider::DISCOVERY]));
 
         $this->oidc->clock->sleep(1);
-        self::assertSame(TestProvider::TOKEN, $this->oidc->metadata()->load($provider)->tokenEndpoint);
+        self::assertSame(TestProvider::TOKEN, $this->oidc->metadata()->load($provider->oidc, $provider->trust)->tokenEndpoint);
         self::assertSame($initialFetches + 2, $this->oidc->provider->countRequests([TestProvider::DISCOVERY]));
     }
 
@@ -159,7 +161,8 @@ final class MetadataProviderTest extends TestCase
     private function load(): OidcFailure
     {
         try {
-            $this->oidc->metadata()->load($this->oidc->configuration()->provider);
+            $provider = $this->oidc->configuration()->provider;
+            $this->oidc->metadata()->load($provider->oidc, $provider->trust);
         } catch (OidcFailure $failure) {
             return $failure;
         }

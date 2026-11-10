@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace JointIdentityProvider\Oidc;
 
 use DateTimeImmutable;
-use JointIdentityProvider\Core\Configuration\ProviderConfiguration;
 use JointIdentityProvider\Oidc\Configuration\ClientConfiguration;
+use JointIdentityProvider\Oidc\Configuration\OidcProviderConfiguration;
+use JointIdentityProvider\Oidc\Configuration\TrustSettings;
 use JointIdentityProvider\Oidc\Discovery\MetadataProvider;
 use JointIdentityProvider\Oidc\Discovery\ProviderMetadata;
 use JointIdentityProvider\Oidc\IdToken\IdTokenValidator;
@@ -33,14 +34,15 @@ final readonly class OidcClient
      * @throws OidcFailure
      */
     public function authorizationUrl(
-        ProviderConfiguration $provider,
+        OidcProviderConfiguration $provider,
+        TrustSettings $trust,
         ClientConfiguration $client,
         #[SensitiveParameter] string $state,
         #[SensitiveParameter] string $nonce,
         #[SensitiveParameter] string $pkceVerifier,
     ): string {
-        $metadata = $this->supportedMetadata($provider, $client);
-        $authorization = $provider->oidc->authorization;
+        $metadata = $this->supportedMetadata($provider, $trust, $client);
+        $authorization = $provider->authorization;
 
         $parameters = [
             'response_type' => 'code',
@@ -71,23 +73,27 @@ final readonly class OidcClient
      * @throws OidcFailure
      */
     public function completeLogin(
-        ProviderConfiguration $provider,
+        OidcProviderConfiguration $provider,
+        TrustSettings $trust,
         ClientConfiguration $client,
         #[SensitiveParameter] string $code,
         #[SensitiveParameter] string $pkceVerifier,
         #[SensitiveParameter] string $nonce,
         DateTimeImmutable $attemptStartedAt,
     ): AuthenticatedLogin {
-        $metadata = $this->supportedMetadata($provider, $client);
+        $metadata = $this->supportedMetadata($provider, $trust, $client);
         $tokens = $this->tokens->exchange($metadata, $client, $code, $pkceVerifier);
-        $idToken = $this->idTokens->validate($tokens->idToken, $provider, $client, $nonce, $attemptStartedAt);
+        $idToken = $this->idTokens->validate($tokens->idToken, $trust, $client, $nonce, $attemptStartedAt);
 
         return new AuthenticatedLogin($client, $metadata, $idToken, $tokens->accessToken, $attemptStartedAt);
     }
 
-    private function supportedMetadata(ProviderConfiguration $provider, ClientConfiguration $client): ProviderMetadata
-    {
-        $metadata = $this->metadata->load($provider);
+    private function supportedMetadata(
+        OidcProviderConfiguration $provider,
+        TrustSettings $trust,
+        ClientConfiguration $client,
+    ): ProviderMetadata {
+        $metadata = $this->metadata->load($provider, $trust);
         if (!$metadata->supports($client->authentication)) {
             throw new OidcFailure(
                 OidcFailureType::AuthenticationMethodNotSupported,

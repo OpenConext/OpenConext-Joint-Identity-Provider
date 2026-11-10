@@ -158,7 +158,7 @@ final class TokenClientTest extends TestCase
     private function exchange(JipConfiguration $configuration): void
     {
         $this->oidc->tokens()->exchange(
-            $this->oidc->metadata()->load($configuration->provider),
+            $this->oidc->metadata()->load($configuration->provider->oidc, $configuration->provider->trust),
             $configuration->provider->oidc->clients['ggd'],
             'the-code',
             'the-verifier',

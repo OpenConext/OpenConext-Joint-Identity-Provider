@@ -85,8 +85,8 @@ final class ConfigurationLoaderTest extends TestCase
         self::assertSame(Environment::Mock, $configuration->environment);
         self::assertSame(Fixture::API_TOKEN, $configuration->engineBlock->apiToken);
         self::assertSame('dezi', $configuration->provider->profile);
-        self::assertSame(['id_token', 'envelope', 'statement'], array_keys($configuration->provider->approvedKeyAddresses));
-        self::assertSame(['id_token', 'envelope', 'statement'], array_keys($configuration->provider->expectedIssuers));
+        self::assertSame(['id_token', 'envelope', 'statement'], array_keys($configuration->provider->trust->approvedKeyAddresses));
+        self::assertSame(['id_token', 'envelope', 'statement'], array_keys($configuration->provider->trust->expectedIssuers));
         $client = $configuration->provider->oidc->clients['ggd'];
         self::assertSame('https://jip.dev.openconext.local/oidc/callback', $client->redirectUri);
         self::assertSame(ClientAuthentication::PrivateKeyJwt, $client->authentication);

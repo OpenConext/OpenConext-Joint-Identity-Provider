@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace JointIdentityProvider\Core\Profile;
 
 use DateTimeImmutable;
+use JointIdentityProvider\Configuration\Reader\ConfigNode;
 use JointIdentityProvider\Core\Configuration\ProviderConfiguration;
-use JointIdentityProvider\Core\Configuration\Reader\ConfigNode;
 use JointIdentityProvider\Oidc\AuthenticatedLogin;
 use Symfony\Component\DependencyInjection\Attribute\AutoconfigureTag;
 

@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace JointIdentityProvider\Oidc\Discovery;
 
-use JointIdentityProvider\Core\Configuration\ProviderConfiguration;
-use JointIdentityProvider\Core\Configuration\Reader\ConfigNode;
+use JointIdentityProvider\Configuration\Reader\ConfigNode;
 use JointIdentityProvider\Oidc\Cache\ProviderCache;
+use JointIdentityProvider\Oidc\Configuration\OidcProviderConfiguration;
+use JointIdentityProvider\Oidc\Configuration\TrustSettings;
 use JointIdentityProvider\Oidc\Http\NoAnswer;
 use JointIdentityProvider\Oidc\Http\ProviderHttpClient;
 use JointIdentityProvider\Oidc\OidcFailure;
@@ -33,22 +34,22 @@ final readonly class MetadataProvider
     /**
      * @throws OidcFailure
      */
-    public function load(ProviderConfiguration $provider): ProviderMetadata
+    public function load(OidcProviderConfiguration $provider, TrustSettings $trust): ProviderMetadata
     {
-        $issuer = $provider->oidc->issuer;
+        $issuer = $provider->issuer;
 
         $result = $this->cache->update(
             'discovery ' . $issuer,
-            function (?array $entry) use ($provider, $issuer): array {
+            function (?array $entry) use ($provider, $trust, $issuer): array {
                 $now = (float) $this->clock->now()->format('U.u');
 
                 $fetchedAt = $entry['fetched_at'] ?? null;
                 $document = $entry['document'] ?? null;
                 if (
                     (is_int($fetchedAt) || is_float($fetchedAt)) && is_array($document)
-                    && $now >= $fetchedAt && $now < $fetchedAt + $provider->keyCacheSeconds
+                    && $now >= $fetchedAt && $now < $fetchedAt + $trust->keyCacheSeconds
                 ) {
-                    $kept = self::validate(self::stringKeys($document), $provider);
+                    $kept = self::validate(self::stringKeys($document), $provider, $trust);
                     if ($kept instanceof ProviderMetadata) {
                         return [null, $kept];
                     }
@@ -63,13 +64,13 @@ final readonly class MetadataProvider
                 if (
                     $failureType !== null && (is_int($lastAttemptAt) || is_float($lastAttemptAt))
                     && $now >= $lastAttemptAt
-                    && $now < $lastAttemptAt + $provider->keyRefetchMinIntervalSeconds
+                    && $now < $lastAttemptAt + $trust->keyRefetchMinIntervalSeconds
                 ) {
                     return [null, new OidcFailure($failureType, 'previous discovery fetch failed')];
                 }
 
                 $fetched = $this->fetch($issuer);
-                $metadata = $fetched instanceof OidcFailure ? $fetched : self::validate($fetched, $provider);
+                $metadata = $fetched instanceof OidcFailure ? $fetched : self::validate($fetched, $provider, $trust);
                 if ($metadata instanceof OidcFailure) {
                     return [[
                         'last_attempt_at' => $now,
@@ -110,13 +111,16 @@ final readonly class MetadataProvider
     /**
      * @param array<string, mixed> $document
      */
-    private static function validate(array $document, ProviderConfiguration $provider): ProviderMetadata|OidcFailure
-    {
-        if (($document['issuer'] ?? null) !== $provider->oidc->issuer) {
+    private static function validate(
+        array $document,
+        OidcProviderConfiguration $provider,
+        TrustSettings $trust,
+    ): ProviderMetadata|OidcFailure {
+        if (($document['issuer'] ?? null) !== $provider->issuer) {
             return new OidcFailure(OidcFailureType::DiscoveryInvalid, 'issuer differs from provider.issuer');
         }
 
-        $jwksUri = $provider->approvedKeyAddresses[ProviderConfiguration::ID_TOKEN];
+        $jwksUri = $trust->approvedKeyAddresses[TrustSettings::ID_TOKEN];
         if (($document['jwks_uri'] ?? null) !== $jwksUri) {
             return new OidcFailure(
                 OidcFailureType::DiscoveryInvalid,
@@ -146,7 +150,7 @@ final readonly class MetadataProvider
         }
 
         return new ProviderMetadata(
-            $provider->oidc->issuer,
+            $provider->issuer,
             $authorizationEndpoint,
             $tokenEndpoint,
             $jwksUri,
