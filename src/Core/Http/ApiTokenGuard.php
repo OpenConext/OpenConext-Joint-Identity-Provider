@@ -47,10 +47,6 @@ final readonly class ApiTokenGuard
         $body = $route === 'jip_sbs_authz'
             ? ['msg' => AuthzController::MSG_ERROR]
             : ['error' => 'unauthorized'];
-        $event->setResponse(new JsonResponse(
-            $body,
-            Response::HTTP_UNAUTHORIZED,
-            ['Cache-Control' => 'no-store'],
-        ));
+        $event->setResponse(new JsonResponse($body, Response::HTTP_UNAUTHORIZED));
     }
 }

@@ -47,7 +47,7 @@ final readonly class ConfigurationGuard
             $event->setResponse(new Response(
                 'Service unavailable',
                 Response::HTTP_SERVICE_UNAVAILABLE,
-                ['Content-Type' => 'text/plain; charset=UTF-8', 'Cache-Control' => 'no-store'],
+                ['Content-Type' => 'text/plain; charset=UTF-8'],
             ));
         }
     }

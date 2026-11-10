@@ -39,7 +39,7 @@ final readonly class HealthController
                 ['problems' => implode('; ', $exception->errors)],
             );
 
-            return self::response(['status' => 'DOWN'], Response::HTTP_SERVICE_UNAVAILABLE);
+            return new JsonResponse(['status' => 'DOWN'], Response::HTTP_SERVICE_UNAVAILABLE);
         }
 
         try {
@@ -50,23 +50,12 @@ final readonly class HealthController
                 'exception_class' => $exception::class,
             ]);
 
-            return self::response(['status' => 'DOWN'], Response::HTTP_SERVICE_UNAVAILABLE);
+            return new JsonResponse(['status' => 'DOWN'], Response::HTTP_SERVICE_UNAVAILABLE);
         }
 
-        return self::response(
+        return new JsonResponse(
             ['status' => 'UP', 'certificates' => $this->certificateExpiry->status($configuration)],
             Response::HTTP_OK,
         );
-    }
-
-    /**
-     * @param array<string, string> $body
-     */
-    private static function response(array $body, int $status): JsonResponse
-    {
-        $response = new JsonResponse($body, $status);
-        $response->headers->set('Cache-Control', 'no-store');
-
-        return $response;
     }
 }

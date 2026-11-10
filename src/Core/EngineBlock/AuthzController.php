@@ -41,7 +41,7 @@ final readonly class AuthzController
         try {
             $data = json_decode($request->getContent(), false, 16, JSON_THROW_ON_ERROR);
         } catch (JsonException) {
-            return self::respond(['msg' => self::MSG_ERROR], Response::HTTP_BAD_REQUEST);
+            return new JsonResponse(['msg' => self::MSG_ERROR], Response::HTTP_BAD_REQUEST);
         }
 
         if ($data instanceof stdClass) {
@@ -52,12 +52,12 @@ final readonly class AuthzController
         }
         $startRequest = StartRequest::fromJson($data, $configuration->binding->organisationAttribute);
         if ($startRequest === null) {
-            return self::respond(['msg' => self::MSG_ERROR], Response::HTTP_BAD_REQUEST);
+            return new JsonResponse(['msg' => self::MSG_ERROR], Response::HTTP_BAD_REQUEST);
         }
 
         $transaction = $this->starter->start($startRequest, $configuration)->transaction;
         if ($transaction === null) {
-            return self::respond(['msg' => self::MSG_ERROR], Response::HTTP_OK);
+            return new JsonResponse(['msg' => self::MSG_ERROR], Response::HTTP_OK);
         }
 
         $body = ['msg' => self::MSG_INTERRUPT, 'nonce' => $transaction->id];
@@ -70,17 +70,6 @@ final readonly class AuthzController
             $body['message'] = $message;
         }
 
-        return self::respond($body, Response::HTTP_OK);
-    }
-
-    /**
-     * @param array<string, string> $body
-     */
-    private static function respond(array $body, int $status): JsonResponse
-    {
-        $response = new JsonResponse($body, $status);
-        $response->headers->set('Cache-Control', 'no-store');
-
-        return $response;
+        return new JsonResponse($body, Response::HTTP_OK);
     }
 }

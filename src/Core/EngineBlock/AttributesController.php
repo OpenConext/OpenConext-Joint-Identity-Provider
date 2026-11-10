@@ -62,7 +62,7 @@ final readonly class AttributesController
     private static function answer(DeliveryOutcome $outcome): JsonResponse
     {
         if ($outcome->attributes !== null) {
-            return self::respond(['attributes' => $outcome->attributes], Response::HTTP_OK);
+            return new JsonResponse(['attributes' => $outcome->attributes], Response::HTTP_OK);
         }
 
         return self::error($outcome->status === Response::HTTP_NOT_FOUND ? 'not_found' : 'forbidden', $outcome->status);
@@ -70,17 +70,6 @@ final readonly class AttributesController
 
     private static function error(string $error, int $status): JsonResponse
     {
-        return self::respond(['error' => $error], $status);
-    }
-
-    /**
-     * @param array<string, mixed> $body
-     */
-    private static function respond(array $body, int $status): JsonResponse
-    {
-        $response = new JsonResponse($body, $status);
-        $response->headers->set('Cache-Control', 'no-store');
-
-        return $response;
+        return new JsonResponse(['error' => $error], $status);
     }
 }

@@ -16,7 +16,7 @@ final class BrowserPages
 {
     public static function redirect(string $url): RedirectResponse
     {
-        return self::secure(new RedirectResponse($url, Response::HTTP_FOUND));
+        return new RedirectResponse($url, Response::HTTP_FOUND);
     }
 
     public static function inProgress(Transaction $transaction): Response
@@ -90,20 +90,6 @@ final class BrowserPages
             'Content-Security-Policy',
             "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
         );
-
-        return self::secure($response);
-    }
-
-    /**
-     * @template T of Response
-     * @param T $response
-     * @return T
-     */
-    private static function secure(Response $response): Response
-    {
-        $response->headers->set('Cache-Control', 'no-store');
-        $response->headers->set('Referrer-Policy', 'no-referrer');
-        $response->headers->set('X-Frame-Options', 'DENY');
 
         return $response;
     }
