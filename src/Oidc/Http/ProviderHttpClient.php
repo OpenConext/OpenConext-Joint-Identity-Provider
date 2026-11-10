@@ -66,6 +66,8 @@ final readonly class ProviderHttpClient
             $options['timeout'] = $timeoutSeconds;
             $options['max_duration'] = $timeoutSeconds;
         }
+        // Repeated per request so the limits hold whichever client is injected.
+        $options += self::DEFAULT_OPTIONS;
         $options['on_progress'] = static function (int $downloaded, int $expected): void {
             if ($downloaded > self::MAX_BODY_BYTES || $expected > self::MAX_BODY_BYTES) {
                 throw new NoAnswer('The answer is larger than the size limit.');

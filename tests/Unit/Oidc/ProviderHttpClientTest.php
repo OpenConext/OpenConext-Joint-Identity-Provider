@@ -61,4 +61,18 @@ final class ProviderHttpClientTest extends TestCase
 
         self::assertSame('{}', (new ProviderHttpClient($client))->postForm('https://provider.example/token', [])->body);
     }
+
+    public function test_a_client_without_defaults_still_gets_the_safety_limits(): void
+    {
+        $client = new MockHttpClient(static function (string $method, string $url, array $options): MockResponse {
+            self::assertSame(0, $options['max_redirects']);
+            self::assertSame(5.0, $options['timeout']);
+            self::assertSame(5.0, $options['max_duration']);
+            self::assertSame(STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT, $options['crypto_method']);
+
+            return new MockResponse('{}');
+        });
+
+        self::assertSame('{}', (new ProviderHttpClient($client))->get('https://provider.example/status')->body);
+    }
 }
