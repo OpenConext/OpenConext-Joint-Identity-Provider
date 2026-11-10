@@ -6,6 +6,7 @@ namespace JointIdentityProvider\Tests\Support;
 
 use JointIdentityProvider\Core\Configuration\ConfigurationLoader;
 use JointIdentityProvider\Core\Configuration\ConfigurationParser;
+use JointIdentityProvider\Core\Configuration\TransactionStoreConfigurationParser;
 use JointIdentityProvider\Core\Profile\ProfileRegistry;
 use JointIdentityProvider\Oidc\Cache\ProviderCache;
 use JointIdentityProvider\Oidc\Configuration\KeyPairReader;
@@ -13,6 +14,7 @@ use JointIdentityProvider\Oidc\Configuration\OidcConfigurationParser;
 use JointIdentityProvider\Oidc\Http\ProviderHttpClient;
 use JointIdentityProvider\Oidc\Jose\SignedMessageVerifier;
 use JointIdentityProvider\Oidc\Keys\KeyResolver;
+use JointIdentityProvider\Profile\Dezi\DeziConfigurationParser;
 use JointIdentityProvider\Profile\Dezi\DeziProfile;
 use JointIdentityProvider\Profile\Dezi\ProofValidator;
 use JointIdentityProvider\Profile\Dezi\RevocationChecker;
@@ -110,6 +112,7 @@ final class ConfigurationFixture
         $parser = new ConfigurationParser(
             new ProfileRegistry([self::deziProfile()]),
             new OidcConfigurationParser(new KeyPairReader(self::projectDir())),
+            new TransactionStoreConfigurationParser(),
         );
 
         return new ConfigurationLoader($parser, self::projectDir(), $configFile, $deploymentEnvironment);
@@ -130,6 +133,7 @@ final class ConfigurationFixture
             new ProofValidator(new SignedMessageVerifier($keys)),
             new RevocationChecker($http, $clock),
             $clock,
+            new DeziConfigurationParser(),
         );
     }
 

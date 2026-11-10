@@ -14,6 +14,7 @@ use JointIdentityProvider\Oidc\Keys\KeyResolver;
 use JointIdentityProvider\Oidc\OidcClient;
 use JointIdentityProvider\Oidc\Token\ClientAssertionFactory;
 use JointIdentityProvider\Oidc\Token\TokenClient;
+use JointIdentityProvider\Profile\Dezi\DeziConfigurationParser;
 use JointIdentityProvider\Profile\Dezi\DeziProfile;
 use JointIdentityProvider\Profile\Dezi\ProofValidator;
 use JointIdentityProvider\Profile\Dezi\RevocationChecker;
@@ -102,6 +103,7 @@ final class OidcFixture
             new ProofValidator(new SignedMessageVerifier($this->keys())),
             new RevocationChecker($this->http, $this->clock),
             $this->clock,
+            new DeziConfigurationParser(),
         );
     }
 
