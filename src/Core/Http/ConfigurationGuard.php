@@ -20,7 +20,7 @@ use Symfony\Component\HttpKernel\KernelEvents;
 #[AsEventListener(event: KernelEvents::REQUEST, priority: 16)]
 final readonly class ConfigurationGuard
 {
-    public const array UNGUARDED_ROUTES = ['jip_health'];
+    public const array UNGUARDED_ROUTES = [HealthController::ROUTE];
 
     public function __construct(
         private ConfigurationLoader $loader,

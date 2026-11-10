@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace JointIdentityProvider\Core\Http;
 
+use JointIdentityProvider\Core\Browser\CallbackController;
+use JointIdentityProvider\Core\Browser\InterruptController;
 use JointIdentityProvider\Core\Configuration\ConfigurationLoader;
 use JointIdentityProvider\Core\EngineBlock\ApiTokenAuthenticator;
 use JointIdentityProvider\Core\EngineBlock\AuthzController;
@@ -20,7 +22,7 @@ use Symfony\Component\HttpKernel\KernelEvents;
 #[AsEventListener(event: KernelEvents::REQUEST, priority: 8)]
 final readonly class ApiTokenGuard
 {
-    public const array PUBLIC_ROUTES = ['jip_health', 'jip_interrupt', 'jip_oidc_callback'];
+    public const array PUBLIC_ROUTES = [HealthController::ROUTE, InterruptController::ROUTE, CallbackController::ROUTE];
 
     public function __construct(private ConfigurationLoader $loader)
     {
@@ -44,7 +46,7 @@ final readonly class ApiTokenGuard
         }
 
         // Preserve each SBS endpoint's existing error contract; future endpoints use the generic body.
-        $body = $route === 'jip_sbs_authz'
+        $body = $route === AuthzController::ROUTE
             ? ['msg' => AuthzController::MSG_ERROR]
             : ['error' => 'unauthorized'];
         $event->setResponse(new JsonResponse($body, Response::HTTP_UNAUTHORIZED));

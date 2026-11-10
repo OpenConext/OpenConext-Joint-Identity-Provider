@@ -12,6 +12,8 @@ use Symfony\Component\Routing\Attribute\Route;
 
 final readonly class InterruptController
 {
+    public const string ROUTE = 'jip_interrupt';
+
     public function __construct(
         private ConfigurationLoader $loader,
         private HandOff $handOff,
@@ -19,7 +21,7 @@ final readonly class InterruptController
     ) {
     }
 
-    #[Route('/interrupt', name: 'jip_interrupt', methods: ['GET'])]
+    #[Route('/interrupt', name: self::ROUTE, methods: ['GET'])]
     public function __invoke(Request $request): Response
     {
         $configuration = $this->loader->load();

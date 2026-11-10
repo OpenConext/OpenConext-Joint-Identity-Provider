@@ -26,7 +26,11 @@ Paths starting with `devenv/` or `docs/` in this README refer to that repository
 | --- | --- | --- | --- |
 | Core | `JointIdentityProvider\Core` | configuration contract and startup checks, claim mapping, account binding, service policies, transaction store, profile interfaces, result delivery, `/health`, `jip:config:validate` | No. Claim and attribute names come from the configuration or from the profile |
 | OIDC client | `JointIdentityProvider\Oidc` | discovery, authorisation with PKCE, token exchange, client assertions, signing-key cache, ID-token and signed-message validation | No |
+| Shared configuration readers | `JointIdentityProvider\Configuration` | `ConfigNode` and `ConfigurationErrors`, used by every part to read and report on the configuration tree | No |
 | DEZI profile | `JointIdentityProvider\Profile\Dezi` | `provider.profile: dezi`: UserInfo decryption, envelope and statement checks, the status check and its renewal, its message types (`envelope`, `statement`), releasable claims, binding claim `dezi_nummer`, `expected_assurance`, `envelope`, `statement`, `revocation` | Yes |
+
+Dependency direction, enforced by deptrac (see "Quality checks"): the shared configuration readers
+depend on no other part, Oidc only on them, Core also on Oidc, and profiles on all three.
 
 Interfaces between the parts:
 

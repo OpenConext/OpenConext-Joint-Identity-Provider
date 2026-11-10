@@ -13,6 +13,8 @@ use Symfony\Component\Routing\Attribute\Route;
 
 final readonly class CallbackController
 {
+    public const string ROUTE = 'jip_oidc_callback';
+
     public function __construct(
         private ConfigurationLoader $loader,
         private LoginCallback $callback,
@@ -20,7 +22,7 @@ final readonly class CallbackController
     ) {
     }
 
-    #[Route(ClientConfiguration::CALLBACK_PATH, name: 'jip_oidc_callback', methods: ['GET'])]
+    #[Route(ClientConfiguration::CALLBACK_PATH, name: self::ROUTE, methods: ['GET'])]
     public function __invoke(Request $request): Response
     {
         $configuration = $this->loader->load();

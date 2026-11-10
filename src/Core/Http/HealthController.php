@@ -21,6 +21,8 @@ use Throwable;
  */
 final readonly class HealthController
 {
+    public const string ROUTE = 'jip_health';
+
     public function __construct(
         private ConfigurationLoader $loader,
         private CertificateExpiryCheck $certificateExpiry,
@@ -29,7 +31,7 @@ final readonly class HealthController
     ) {
     }
 
-    #[Route('/health', name: 'jip_health', methods: ['GET'])]
+    #[Route('/health', name: self::ROUTE, methods: ['GET'])]
     public function __invoke(): JsonResponse
     {
         try {

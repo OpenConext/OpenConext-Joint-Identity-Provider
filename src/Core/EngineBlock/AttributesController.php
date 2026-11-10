@@ -23,6 +23,8 @@ use Throwable;
  */
 final readonly class AttributesController
 {
+    public const string ROUTE = 'jip_sbs_attributes';
+
     public function __construct(
         private ConfigurationLoader $loader,
         private ResultDelivery $delivery,
@@ -30,7 +32,7 @@ final readonly class AttributesController
     ) {
     }
 
-    #[Route('/attributes', name: 'jip_sbs_attributes', methods: ['POST'])]
+    #[Route('/attributes', name: self::ROUTE, methods: ['POST'])]
     public function __invoke(Request $request): JsonResponse
     {
         $configuration = $this->loader->load();

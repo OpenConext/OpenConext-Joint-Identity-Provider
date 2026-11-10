@@ -27,13 +27,15 @@ final readonly class AuthzController
     public const string MESSAGE_LOGIN_REQUIRED = 'DEZI_LOGIN_REQUIRED';
     public const string MESSAGE_SKIPPED = 'DEZI_SKIPPED';
 
+    public const string ROUTE = 'jip_sbs_authz';
+
     public function __construct(
         private ConfigurationLoader $loader,
         private TransactionStarter $starter,
     ) {
     }
 
-    #[Route('/authz', name: 'jip_sbs_authz', methods: ['POST'])]
+    #[Route('/authz', name: self::ROUTE, methods: ['POST'])]
     public function __invoke(Request $request): JsonResponse
     {
         $configuration = $this->loader->load();

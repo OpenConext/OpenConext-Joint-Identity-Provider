@@ -250,7 +250,13 @@ final readonly class ResultDelivery
         FailureType $type,
         JipConfiguration $configuration,
     ): DeliveryOutcome {
-        $this->refusals->log('result', $transaction, $type, $configuration);
+        $this->refusals->log(
+            'result',
+            $transaction,
+            $type,
+            self::CORRELATION_SUFFIX,
+            self::context($transaction, $configuration),
+        );
 
         return DeliveryOutcome::notFound();
     }

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace JointIdentityProvider\Core\Result;
 
 use DateTimeImmutable;
-use JointIdentityProvider\Core\Configuration\JipConfiguration;
 use JointIdentityProvider\Core\EngineBlock\LogFields;
 use JointIdentityProvider\Core\Transaction\FailureType;
 use JointIdentityProvider\Core\Transaction\Transaction;
@@ -18,6 +17,9 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
  */
 final readonly class TransactionRefusal
 {
+    public const string START_CORRELATION =
+        ' policy version {policy_version} at start, EngineBlock request {eb_request_id}';
+
     public function __construct(
         #[Autowire(service: 'jip.logger')] private LoggerInterface $logger,
     ) {
@@ -32,31 +34,25 @@ final readonly class TransactionRefusal
         };
     }
 
+    /**
+     * @param array<string, string> $correlationContext values for placeholders that $correlation adds
+     */
     public function log(
         string $flow,
         Transaction $transaction,
         FailureType $type,
-        ?JipConfiguration $deliveryConfiguration = null,
+        string $correlation = self::START_CORRELATION,
+        array $correlationContext = [],
     ): void {
-        $suffix = $deliveryConfiguration === null
-            ? ' policy version {policy_version} at start, EngineBlock request {eb_request_id}'
-            : ' policy version {policy_version} at start and {policy_version_delivery} at delivery,'
-                . ' EngineBlock request {eb_request_id}';
-        $context = [
-            'flow' => $flow,
-            'log_id' => $transaction->logId,
-            'failure_type' => $type->value,
-            'state' => $transaction->state->value,
-        ] + LogFields::correlation($transaction);
-        if ($deliveryConfiguration !== null) {
-            $context['policy_version_delivery'] = ($deliveryConfiguration->services[$transaction->serviceId] ?? null)
-                ->connectionPolicyVersion ?? '-';
-        }
-
         $this->logger->warning(
             'JIP {flow} {log_id}: refused ({failure_type}); transaction unchanged ({state})'
-            . ' for service {service}, organisation {organisation},' . $suffix,
-            $context,
+            . ' for service {service}, organisation {organisation},' . $correlation,
+            [
+                'flow' => $flow,
+                'log_id' => $transaction->logId,
+                'failure_type' => $type->value,
+                'state' => $transaction->state->value,
+            ] + $correlationContext + LogFields::correlation($transaction),
         );
     }
 }

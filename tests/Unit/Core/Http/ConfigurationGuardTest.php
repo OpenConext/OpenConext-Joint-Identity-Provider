@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace JointIdentityProvider\Tests\Unit\Core\Http;
 
 use JointIdentityProvider\Core\Http\ConfigurationGuard;
+use JointIdentityProvider\Core\Http\HealthController;
 use JointIdentityProvider\Tests\Support\ConfigurationFixture;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -52,7 +53,7 @@ final class ConfigurationGuardTest extends TestCase
 
     public function test_the_readiness_check_reports_for_itself(): void
     {
-        $event = $this->dispatch('jip_health', $this->invalidConfiguration());
+        $event = $this->dispatch(HealthController::ROUTE, $this->invalidConfiguration());
 
         self::assertNull($event->getResponse());
     }

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace JointIdentityProvider\Core\Http;
 
+use JointIdentityProvider\Core\Browser\CallbackController;
+use JointIdentityProvider\Core\Browser\InterruptController;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\HttpKernel\Event\ResponseEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
@@ -15,7 +17,7 @@ use Symfony\Component\HttpKernel\KernelEvents;
 #[AsEventListener(event: KernelEvents::RESPONSE, priority: -256)]
 final readonly class ResponseHeadersListener
 {
-    private const array BROWSER_ROUTES = ['jip_interrupt', 'jip_oidc_callback'];
+    private const array BROWSER_ROUTES = [InterruptController::ROUTE, CallbackController::ROUTE];
 
     public function __invoke(ResponseEvent $event): void
     {

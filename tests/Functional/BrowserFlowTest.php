@@ -88,6 +88,7 @@ final class BrowserFlowTest extends WebTestCase
         self::assertResponseHeaderSame('Strict-Transport-Security', 'max-age=31536000');
         self::assertStringStartsWith(TestProvider::AUTHORIZE . '?', (string) $response->headers->get('Location'));
         self::assertSame('no-referrer', $response->headers->get('Referrer-Policy'));
+        self::assertSame('DENY', $response->headers->get('X-Frame-Options'));
         self::assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
         self::assertSame('code', $query['response_type']);
         self::assertSame(TestProvider::CLIENT_ID, $query['client_id']);
@@ -372,6 +373,8 @@ final class BrowserFlowTest extends WebTestCase
         $this->returnFromProvider(['code' => 'the-code', 'state' => $query['state']]);
         self::assertResponseStatusCodeSame(400);
         self::assertResponseHeaderSame('Strict-Transport-Security', 'max-age=31536000');
+        self::assertResponseHeaderSame('Referrer-Policy', 'no-referrer');
+        self::assertResponseHeaderSame('X-Frame-Options', 'DENY');
         self::assertStringContainsString('callback_mismatch', $this->bodyText());
         self::assertSame([self::RESTART_URL], $this->links());
         $this->assertCallbackRejections($transaction, 1);
