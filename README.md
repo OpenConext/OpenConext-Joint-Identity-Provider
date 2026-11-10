@@ -199,6 +199,8 @@ The guard and handlers use `ConfigurationLoader::load()` to share one validated 
 snapshot per main HTTP request, including subrequests. Each new request reloads the files; CLI calls
 also load afresh. The snapshot is never cached for the lifetime of a persistent worker.
 
+All routes require the API token by default, except `/health`, `/interrupt`, and `/oidc/callback`.
+
 ## Browser hand-off and callback
 
 JIP has no credential-entry page. `GET /interrupt?nonce=…` claims a pending transaction atomically,

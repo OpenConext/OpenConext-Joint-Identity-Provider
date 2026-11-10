@@ -34,10 +34,6 @@ final readonly class AttributesController
     {
         $configuration = $this->loader->load();
 
-        if (!ApiTokenAuthenticator::isAuthorized($request, $configuration->engineBlock->apiToken)) {
-            return self::error('unauthorized', Response::HTTP_UNAUTHORIZED);
-        }
-
         try {
             $data = json_decode($request->getContent(), true, 4, JSON_THROW_ON_ERROR);
         } catch (JsonException) {

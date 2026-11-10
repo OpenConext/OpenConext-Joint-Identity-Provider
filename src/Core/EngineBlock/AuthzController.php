@@ -38,10 +38,6 @@ final readonly class AuthzController
     {
         $configuration = $this->loader->load();
 
-        if (!ApiTokenAuthenticator::isAuthorized($request, $configuration->engineBlock->apiToken)) {
-            return self::respond(['msg' => self::MSG_ERROR], Response::HTTP_UNAUTHORIZED);
-        }
-
         try {
             $data = json_decode($request->getContent(), false, 16, JSON_THROW_ON_ERROR);
         } catch (JsonException) {
