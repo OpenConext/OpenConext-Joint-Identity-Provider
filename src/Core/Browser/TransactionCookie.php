@@ -18,6 +18,22 @@ final class TransactionCookie
 {
     private const string PREFIX = '__Secure-jip_tx_';
 
+    /**
+     * @param array<mixed> $cookies
+     * @return array<string, mixed> cookie values keyed by transaction log ID
+     */
+    public static function values(array $cookies): array
+    {
+        $values = [];
+        foreach ($cookies as $name => $value) {
+            if (is_string($name) && str_starts_with($name, self::PREFIX)) {
+                $values[substr($name, strlen(self::PREFIX))] = $value;
+            }
+        }
+
+        return $values;
+    }
+
     public static function name(Transaction $transaction): string
     {
         return self::PREFIX . $transaction->logId;

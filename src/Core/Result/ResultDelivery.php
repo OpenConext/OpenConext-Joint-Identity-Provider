@@ -42,6 +42,7 @@ final readonly class ResultDelivery
         private ProfileRegistry $profiles,
         private ClockInterface $clock,
         private LoggerInterface $logger,
+        private TransactionRefusal $refusals,
     ) {
     }
 
@@ -55,11 +56,9 @@ final readonly class ResultDelivery
 
             return DeliveryOutcome::notFound();
         }
-        if ($transaction->state === TransactionState::Consumed) {
-            return $this->refuseUnchanged($transaction, FailureType::AlreadyUsed, $configuration);
-        }
-        if ($transaction->isExpired($this->clock->now())) {
-            return $this->refuseUnchanged($transaction, FailureType::Expired, $configuration);
+        $refusal = TransactionRefusal::reason($transaction, $this->clock->now());
+        if ($refusal !== null) {
+            return $this->refuseUnchanged($transaction, $refusal, $configuration);
         }
         if (!in_array($transaction->state, [TransactionState::Succeeded, TransactionState::Skipped], true)) {
             $this->logger->warning('JIP result {log_id}: not deliverable in state {state}', [
@@ -232,11 +231,9 @@ final readonly class ResultDelivery
     {
         $current = $this->store->find($transaction->id);
         $now = $this->clock->now();
-        if ($current?->state === TransactionState::Consumed) {
-            return $this->refuseUnchanged($current, FailureType::AlreadyUsed, $configuration);
-        }
-        if ($transaction->isExpired($now) || ($current !== null && $current->isExpired($now))) {
-            return $this->refuseUnchanged($current ?? $transaction, FailureType::Expired, $configuration);
+        $refusal = TransactionRefusal::reason($current ?? $transaction, $now);
+        if ($refusal !== null) {
+            return $this->refuseUnchanged($current ?? $transaction, $refusal, $configuration);
         }
         $this->logger->warning('JIP result {log_id}: not consumed; the transaction changed or expired', [
             'log_id' => $transaction->logId,
@@ -252,13 +249,7 @@ final readonly class ResultDelivery
         FailureType $type,
         JipConfiguration $configuration,
     ): DeliveryOutcome {
-        $this->logger->warning(
-            'JIP result {log_id}: refused ({failure_type}); transaction unchanged ({state})'
-            . ' for service {service}, organisation {organisation},'
-            . self::CORRELATION_SUFFIX,
-            ['log_id' => $transaction->logId, 'failure_type' => $type->value, 'state' => $transaction->state->value]
-            + self::context($transaction, $configuration),
-        );
+        $this->refusals->log('result', $transaction, $type, $configuration);
 
         return DeliveryOutcome::notFound();
     }

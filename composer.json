@@ -75,7 +75,10 @@
         ],
         "phpcs": "phpcs --standard=ci/qa-config/phpcs.xml",
         "phpstan": "phpstan analyse --configuration=ci/qa-config/phpstan.neon --no-progress",
-        "deptrac": "deptrac analyse --config-file=ci/qa-config/deptrac.yaml --cache-file=var/cache/deptrac.cache --no-progress --fail-on-uncovered",
+        "deptrac": [
+            "deptrac analyse --config-file=ci/qa-config/deptrac.yaml --cache-file=var/cache/deptrac.cache --no-progress --fail-on-uncovered",
+            "deptrac analyse --config-file=ci/qa-config/deptrac-controllers.yaml --cache-file=var/cache/deptrac-controllers.cache --no-progress --fail-on-uncovered"
+        ],
         "phpunit": "phpunit",
         "dependency-audit": "@composer audit --locked --no-interaction",
         "auto-scripts": {

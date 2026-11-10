@@ -1,0 +1,31 @@
+deptrac:
+    paths:
+        - ../../src
+
+    analyser:
+        types:
+            - class
+            - use
+
+    layers:
+        - name: HttpAdapters
+          collectors:
+              - type: classLike
+                value: ^JointIdentityProvider\\Core\\(Browser|EngineBlock)\\
+        - name: ApplicationDetails
+          collectors:
+              - type: classLike
+                value: ^JointIdentityProvider\\(Core\\Transaction\\TransactionStore|Oidc\\OidcClient)$
+        - name: Other
+          collectors:
+              - type: bool
+                must_not:
+                    - type: classLike
+                      value: ^JointIdentityProvider\\Core\\(Browser|EngineBlock)\\
+                    - type: classLike
+                      value: ^JointIdentityProvider\\(Core\\Transaction\\TransactionStore|Oidc\\OidcClient)$
+
+    ruleset:
+        HttpAdapters: [Other]
+        ApplicationDetails: [Other]
+        Other: [HttpAdapters, ApplicationDetails]
