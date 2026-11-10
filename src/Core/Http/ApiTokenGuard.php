@@ -20,7 +20,7 @@ use Symfony\Component\HttpKernel\KernelEvents;
 #[AsEventListener(event: KernelEvents::REQUEST, priority: 8)]
 final readonly class ApiTokenGuard
 {
-    private const array PUBLIC_ROUTES = ['jip_health', 'jip_interrupt', 'jip_oidc_callback'];
+    public const array PUBLIC_ROUTES = ['jip_health', 'jip_interrupt', 'jip_oidc_callback'];
 
     public function __construct(private ConfigurationLoader $loader)
     {
