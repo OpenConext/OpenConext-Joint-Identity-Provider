@@ -22,6 +22,7 @@ final class ProviderHttpClientTest extends TestCase
 
             return new MockResponse('{}');
         });
+        $client = $client->withOptions(ProviderHttpClient::DEFAULT_OPTIONS);
 
         self::assertSame('{}', (new ProviderHttpClient($client))->get('https://provider.example/status', [], 10)->body);
     }
@@ -35,6 +36,7 @@ final class ProviderHttpClientTest extends TestCase
         self::assertLessThan(ProviderHttpClient::MAX_BODY_BYTES, strlen($body));
         $response = new MockResponse($body, ['response_headers' => ['Content-Encoding: gzip']]);
         $client = new MockHttpClient($response);
+        $client = $client->withOptions(ProviderHttpClient::DEFAULT_OPTIONS);
 
         try {
             (new ProviderHttpClient($client))->get('https://provider.example/status');
@@ -55,6 +57,7 @@ final class ProviderHttpClientTest extends TestCase
 
             return new MockResponse('{}');
         });
+        $client = $client->withOptions(ProviderHttpClient::DEFAULT_OPTIONS);
 
         self::assertSame('{}', (new ProviderHttpClient($client))->postForm('https://provider.example/token', [])->body);
     }

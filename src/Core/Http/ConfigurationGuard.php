@@ -7,6 +7,7 @@ namespace JointIdentityProvider\Core\Http;
 use JointIdentityProvider\Core\Configuration\ConfigurationLoader;
 use JointIdentityProvider\Core\Configuration\InvalidConfiguration;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
@@ -23,7 +24,7 @@ final readonly class ConfigurationGuard
 
     public function __construct(
         private ConfigurationLoader $loader,
-        private LoggerInterface $logger,
+        #[Autowire(service: 'jip.logger')] private LoggerInterface $logger,
     ) {
     }
 

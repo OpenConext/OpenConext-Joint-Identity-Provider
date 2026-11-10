@@ -43,7 +43,9 @@ final class OidcFixture
         $this->configFixture = new Fixture();
         $this->provider = new TestProvider();
         $this->clock = new MockClock();
-        $this->http = new ProviderHttpClient(new MockHttpClient($this->provider));
+        $this->http = new ProviderHttpClient(
+            (new MockHttpClient($this->provider))->withOptions(ProviderHttpClient::DEFAULT_OPTIONS),
+        );
         $this->cache = new ProviderCache(
             new FilesystemAdapter('provider', 0, $this->configFixture->directory . '/provider-cache'),
             new LockFactory(new FlockStore($this->configFixture->directory . '/provider-locks')),

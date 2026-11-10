@@ -21,6 +21,7 @@ use JointIdentityProvider\Oidc\OidcFailure;
 use JointIdentityProvider\Oidc\OidcFailureType;
 use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Throwable;
 
 /**
@@ -38,7 +39,7 @@ final readonly class LoginCallback
         private OidcClient $oidc,
         private ProfileRegistry $profiles,
         private ClockInterface $clock,
-        private LoggerInterface $logger,
+        #[Autowire(service: 'jip.logger')] private LoggerInterface $logger,
         private TransactionRefusal $refusals,
     ) {
     }

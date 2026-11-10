@@ -9,6 +9,7 @@ use JointIdentityProvider\Core\Configuration\ConfigurationLoader;
 use JointIdentityProvider\Core\Configuration\InvalidConfiguration;
 use JointIdentityProvider\Core\Storage\TransactionStoreFactory;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -24,7 +25,7 @@ final readonly class HealthController
         private ConfigurationLoader $loader,
         private CertificateExpiryCheck $certificateExpiry,
         private TransactionStoreFactory $stores,
-        private LoggerInterface $logger,
+        #[Autowire(service: 'jip.logger')] private LoggerInterface $logger,
     ) {
     }
 

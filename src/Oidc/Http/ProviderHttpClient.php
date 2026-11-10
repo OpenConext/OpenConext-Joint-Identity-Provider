@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace JointIdentityProvider\Oidc\Http;
 
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Contracts\HttpClient\Exception\ExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
@@ -16,8 +17,16 @@ final readonly class ProviderHttpClient
     public const int TIMEOUT_SECONDS = 5;
     public const int MAX_BODY_BYTES = 1_048_576;
 
-    public function __construct(private HttpClientInterface $httpClient)
-    {
+    public const array DEFAULT_OPTIONS = [
+        'max_redirects' => 0,
+        'timeout' => self::TIMEOUT_SECONDS,
+        'max_duration' => self::TIMEOUT_SECONDS,
+        'crypto_method' => STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT,
+    ];
+
+    public function __construct(
+        #[Autowire(service: 'jip.provider.client')] private HttpClientInterface $httpClient,
+    ) {
     }
 
     /**
@@ -44,7 +53,6 @@ final readonly class ProviderHttpClient
      */
     private function send(string $method, string $url, array $options, ?int $timeoutSeconds): ProviderResponse
     {
-        $timeout = $timeoutSeconds ?? self::TIMEOUT_SECONDS;
         // An explicit encoding disables Symfony's automatic decompression. Keep the size limit on
         // the bytes we consume, and reject a provider that sends an encoded body anyway.
         $options['headers'] ??= ['Accept' => 'application/json'];
@@ -54,17 +62,15 @@ final readonly class ProviderHttpClient
             }
         }
         $options['headers']['Accept-Encoding'] = 'identity';
-        $options += [
-            'max_redirects' => 0,
-            'timeout' => $timeout,
-            'max_duration' => $timeout,
-            'crypto_method' => STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT,
-            'on_progress' => static function (int $downloaded, int $expected): void {
-                if ($downloaded > self::MAX_BODY_BYTES || $expected > self::MAX_BODY_BYTES) {
-                    throw new NoAnswer('The answer is larger than the size limit.');
-                }
-            },
-        ];
+        if ($timeoutSeconds !== null) {
+            $options['timeout'] = $timeoutSeconds;
+            $options['max_duration'] = $timeoutSeconds;
+        }
+        $options['on_progress'] = static function (int $downloaded, int $expected): void {
+            if ($downloaded > self::MAX_BODY_BYTES || $expected > self::MAX_BODY_BYTES) {
+                throw new NoAnswer('The answer is larger than the size limit.');
+            }
+        };
 
         try {
             $response = $this->httpClient->request($method, $url, $options);

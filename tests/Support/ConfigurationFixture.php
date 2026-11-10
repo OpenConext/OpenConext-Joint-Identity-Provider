@@ -123,7 +123,10 @@ final class ConfigurationFixture
      */
     public static function deziProfile(): DeziProfile
     {
-        $http = new ProviderHttpClient(new MockHttpClient(static fn (): MockResponse => new MockResponse('', ['http_code' => 404])));
+        $http = new ProviderHttpClient(
+            (new MockHttpClient(static fn (): MockResponse => new MockResponse('', ['http_code' => 404])))
+                ->withOptions(ProviderHttpClient::DEFAULT_OPTIONS),
+        );
         $clock = new NativeClock();
         $cache = new ProviderCache(new ArrayAdapter(), new LockFactory(new InMemoryStore()));
         $keys = new KeyResolver($http, $cache, $clock);

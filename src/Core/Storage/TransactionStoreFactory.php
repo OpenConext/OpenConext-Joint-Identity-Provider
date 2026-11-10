@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace JointIdentityProvider\Core\Storage;
 
 use JointIdentityProvider\Core\Configuration\ConfigurationLoader;
-use JointIdentityProvider\Core\Transaction\TransactionStore;
 use Psr\Clock\ClockInterface;
 
 /**
@@ -19,7 +18,7 @@ final readonly class TransactionStoreFactory
     ) {
     }
 
-    public function create(): TransactionStore
+    public function create(): MariaDbTransactionStore
     {
         return new MariaDbTransactionStore($this->loader->load()->transactions->store, $this->clock);
     }

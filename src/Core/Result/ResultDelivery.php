@@ -18,6 +18,7 @@ use LogicException;
 use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
 use SensitiveParameter;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 /**
  * Delivers a transaction's result to EngineBlock once (design §12, §13). Checks the stored service and
@@ -41,7 +42,7 @@ final readonly class ResultDelivery
         private TransactionStore $store,
         private ProfileRegistry $profiles,
         private ClockInterface $clock,
-        private LoggerInterface $logger,
+        #[Autowire(service: 'jip.logger')] private LoggerInterface $logger,
         private TransactionRefusal $refusals,
     ) {
     }

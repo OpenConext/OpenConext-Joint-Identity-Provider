@@ -10,6 +10,7 @@ use JointIdentityProvider\Core\Result\ResultDelivery;
 use JointIdentityProvider\Core\Transaction\TransactionId;
 use JsonException;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -25,7 +26,7 @@ final readonly class AttributesController
     public function __construct(
         private ConfigurationLoader $loader,
         private ResultDelivery $delivery,
-        private LoggerInterface $logger,
+        #[Autowire(service: 'jip.logger')] private LoggerInterface $logger,
     ) {
     }
 

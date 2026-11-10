@@ -11,14 +11,16 @@ use JointIdentityProvider\Core\Transaction\FailureType;
 use JointIdentityProvider\Core\Transaction\Transaction;
 use JointIdentityProvider\Core\Transaction\TransactionState;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 /**
  * Consumed takes precedence over expired. Refusals here never change the transaction.
  */
 final readonly class TransactionRefusal
 {
-    public function __construct(private LoggerInterface $logger)
-    {
+    public function __construct(
+        #[Autowire(service: 'jip.logger')] private LoggerInterface $logger,
+    ) {
     }
 
     public static function reason(Transaction $transaction, DateTimeImmutable $now): ?FailureType

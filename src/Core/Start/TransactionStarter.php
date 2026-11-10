@@ -15,6 +15,7 @@ use JointIdentityProvider\Core\Transaction\TransactionState;
 use JointIdentityProvider\Core\Transaction\TransactionStore;
 use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Throwable;
 
 /**
@@ -29,7 +30,7 @@ final readonly class TransactionStarter
         private TransactionStore $store,
         private IdentifierGenerator $identifiers,
         private ClockInterface $clock,
-        private LoggerInterface $logger,
+        #[Autowire(service: 'jip.logger')] private LoggerInterface $logger,
     ) {
     }
 

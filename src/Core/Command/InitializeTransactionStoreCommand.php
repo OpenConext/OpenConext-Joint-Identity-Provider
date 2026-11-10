@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 namespace JointIdentityProvider\Core\Command;
 
-use JointIdentityProvider\Core\Configuration\ConfigurationLoader;
 use JointIdentityProvider\Core\Configuration\InvalidConfiguration;
-use JointIdentityProvider\Core\Storage\MariaDbTransactionStore;
-use Psr\Clock\ClockInterface;
+use JointIdentityProvider\Core\Storage\TransactionStoreFactory;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -19,8 +17,7 @@ use Throwable;
 final class InitializeTransactionStoreCommand extends Command
 {
     public function __construct(
-        private readonly ConfigurationLoader $loader,
-        private readonly ClockInterface $clock,
+        private readonly TransactionStoreFactory $stores,
     ) {
         parent::__construct();
     }
@@ -30,8 +27,7 @@ final class InitializeTransactionStoreCommand extends Command
         $io = new SymfonyStyle($input, $output);
 
         try {
-            $configuration = $this->loader->load();
-            (new MariaDbTransactionStore($configuration->transactions->store, $this->clock))->initializeSchema();
+            $this->stores->create()->initializeSchema();
         } catch (InvalidConfiguration $exception) {
             $io->error('The JIP configuration is invalid. The transaction store was not initialized.');
             $io->listing($exception->errors);

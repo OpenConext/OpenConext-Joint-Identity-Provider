@@ -16,6 +16,7 @@ use JointIdentityProvider\Oidc\OidcClient;
 use JointIdentityProvider\Oidc\OidcFailure;
 use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Throwable;
 
 /**
@@ -29,7 +30,7 @@ final readonly class HandOff
         private TransactionStore $store,
         private OidcClient $oidc,
         private ClockInterface $clock,
-        private LoggerInterface $logger,
+        #[Autowire(service: 'jip.logger')] private LoggerInterface $logger,
         private AttemptGenerator $attempts,
         private TransactionRefusal $refusals,
     ) {
