@@ -12,12 +12,12 @@ use JointIdentityProvider\Tests\Support\ConfigurationFixture as Fixture;
 use JointIdentityProvider\Tests\Support\TestDatabase;
 use JointIdentityProvider\Tests\Support\TestProvider;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\NativeClock;
 use Symfony\Component\Clock\Test\ClockSensitiveTrait;
-use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
 /**
@@ -51,9 +51,9 @@ final class AttributesTest extends WebTestCase
         $this->client = self::createClient();
         $this->client->disableReboot();
 
-        $cacheDir = self::getContainer()->getParameter('kernel.cache_dir');
-        self::assertIsString($cacheDir);
-        (new Filesystem())->remove($cacheDir . '/jip-provider');
+        $cache = self::getContainer()->get('cache.jip_provider');
+        self::assertInstanceOf(CacheItemPoolInterface::class, $cache);
+        self::assertTrue($cache->clear());
 
         $provider = self::getContainer()->get(TestProvider::class);
         self::assertInstanceOf(TestProvider::class, $provider);

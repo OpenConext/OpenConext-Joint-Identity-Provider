@@ -1,0 +1,8 @@
+framework:
+    cache:
+        # Stable across release directories; APP_SHARE_DIR is separated by environment by the kernel.
+        prefix_seed: 'jip.%kernel.environment%'
+        directory: '%kernel.share_dir%/pools'
+        pools:
+            cache.jip_provider:
+                adapter: cache.app

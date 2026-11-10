@@ -5,19 +5,20 @@ declare(strict_types=1);
 namespace JointIdentityProvider\Oidc\Cache;
 
 use Closure;
-use JsonException;
+use Psr\Cache\CacheItemPoolInterface;
 use RuntimeException;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\Lock\LockFactory;
 
 /**
- * Validated provider metadata and key sets, kept between requests (design §14). Each entry is read,
- * decided on and written under an exclusive lock, so a refetch decision holds across processes on
- * this node. Entries hold public data only.
+ * Public provider metadata and keys. The pool and lock store must cover the same processes: each
+ * entry is read, decided on and saved under its lock, including the provider request when needed.
  */
 final readonly class ProviderCache
 {
     public function __construct(
-        #[Autowire('%kernel.cache_dir%/jip-provider')] private string $directory,
+        #[Autowire(service: 'cache.jip_provider')] private CacheItemPoolInterface $pool,
+        #[Autowire(service: 'lock.jip_provider.factory', lazy: true)] private LockFactory $locks,
     ) {
     }
 
@@ -31,71 +32,44 @@ final readonly class ProviderCache
      */
     public function update(string $key, Closure $operation): mixed
     {
-        if (!is_dir($this->directory) && !@mkdir($this->directory, 0o750, true) && !is_dir($this->directory)) {
-            throw new RuntimeException('Cannot create the provider cache directory.');
-        }
-
-        $base = $this->directory . '/' . hash('sha256', $key);
-        $lock = @fopen($base . '.lock', 'c');
-        if ($lock === false) {
-            throw new RuntimeException('Cannot open the provider cache lock.');
+        $id = hash('sha256', $key);
+        $lock = $this->locks->createLock('jip-provider.' . $id);
+        if (!$lock->acquire(true)) {
+            throw new RuntimeException('Cannot lock the provider cache entry.');
         }
 
         try {
-            if (!flock($lock, LOCK_EX)) {
-                throw new RuntimeException('Cannot lock the provider cache entry.');
-            }
-
-            [$next, $result] = $operation(self::read($base . '.json'));
+            $item = $this->pool->getItem($id);
+            [$next, $result] = $operation($item->isHit() ? self::entry($item->get()) : null);
             if ($next !== null) {
-                self::write($base . '.json', $next);
+                // Freshness and failed-fetch backoff use the approved policy and injected clock in
+                // MetadataProvider/KeyResolver, rather than a second, independent pool lifetime.
+                $item->set($next)->expiresAfter(null);
+                if (!$this->pool->save($item)) {
+                    throw new RuntimeException('Cannot save the provider cache entry.');
+                }
             }
 
             return $result;
         } finally {
-            flock($lock, LOCK_UN);
-            fclose($lock);
+            $lock->release();
         }
     }
 
     /**
      * @return array<string, mixed>|null
      */
-    private static function read(string $path): ?array
+    private static function entry(mixed $value): ?array
     {
-        $contents = is_file($path) ? @file_get_contents($path) : false;
-        if ($contents === false) {
-            return null;
-        }
-
-        try {
-            $data = json_decode($contents, true, 32, JSON_THROW_ON_ERROR);
-        } catch (JsonException) {
-            return null;
-        }
-
-        if (!is_array($data)) {
+        if (!is_array($value)) {
             return null;
         }
 
         $entry = [];
-        foreach ($data as $key => $value) {
-            $entry[(string) $key] = $value;
+        foreach ($value as $key => $item) {
+            $entry[(string) $key] = $item;
         }
 
         return $entry;
-    }
-
-    /**
-     * @param array<string, mixed> $entry
-     */
-    private static function write(string $path, array $entry): void
-    {
-        $temporary = $path . '.' . bin2hex(random_bytes(4)) . '.tmp';
-        $json = json_encode($entry, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
-        if (@file_put_contents($temporary, $json) === false || !@rename($temporary, $path)) {
-            @unlink($temporary);
-            throw new RuntimeException('Cannot write the provider cache entry.');
-        }
     }
 }

@@ -20,8 +20,11 @@ use JointIdentityProvider\Profile\Dezi\RevocationChecker;
 use JointIdentityProvider\Profile\Dezi\UserInfoReader;
 use JointIdentityProvider\Tests\Support\ConfigurationFixture as Fixture;
 use RuntimeException;
+use Symfony\Component\Cache\Adapter\FilesystemAdapter;
 use Symfony\Component\Clock\MockClock;
 use Symfony\Component\HttpClient\MockHttpClient;
+use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\Lock\Store\FlockStore;
 
 /**
  * The OIDC client's services, wired by hand around a fake provider, a mock clock and a fresh cache.
@@ -40,7 +43,10 @@ final class OidcFixture
         $this->provider = new TestProvider();
         $this->clock = new MockClock();
         $this->http = new ProviderHttpClient(new MockHttpClient($this->provider));
-        $this->cache = new ProviderCache($this->configFixture->directory . '/provider-cache');
+        $this->cache = new ProviderCache(
+            new FilesystemAdapter('provider', 0, $this->configFixture->directory . '/provider-cache'),
+            new LockFactory(new FlockStore($this->configFixture->directory . '/provider-locks')),
+        );
         Fixture::setEnv('EB_API_TOKEN', Fixture::API_TOKEN);
     }
 

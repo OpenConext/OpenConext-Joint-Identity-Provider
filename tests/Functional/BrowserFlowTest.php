@@ -11,11 +11,13 @@ use JointIdentityProvider\Core\Profile\ProviderProfile;
 use JointIdentityProvider\Core\Transaction\Transaction;
 use JointIdentityProvider\Core\Transaction\TransactionState;
 use JointIdentityProvider\Core\Transaction\TransactionStore;
+use JointIdentityProvider\Oidc\Cache\ProviderCache;
 use JointIdentityProvider\Tests\Support\ConfigurationFixture as Fixture;
 use JointIdentityProvider\Tests\Support\TestDatabase;
 use JointIdentityProvider\Tests\Support\TestProvider;
 use JointIdentityProvider\Tests\Support\VerifyingProfile;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Psr\Cache\CacheItemPoolInterface;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Stringable;
@@ -25,8 +27,9 @@ use Symfony\Component\BrowserKit\Cookie;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\NativeClock;
 use Symfony\Component\Clock\Test\ClockSensitiveTrait;
-use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\HttpClient\Response\MockResponse;
+use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\Lock\Store\InMemoryStore;
 
 /**
  * GET /interrupt and the standard OIDC part of GET /oidc/callback (design §3, §13, §14), with a fake
@@ -57,9 +60,9 @@ final class BrowserFlowTest extends WebTestCase
         $this->client = self::createClient();
         $this->client->disableReboot();
 
-        $cacheDir = self::getContainer()->getParameter('kernel.cache_dir');
-        self::assertIsString($cacheDir);
-        (new Filesystem())->remove($cacheDir . '/jip-provider');
+        $cache = self::getContainer()->get('cache.jip_provider');
+        self::assertInstanceOf(CacheItemPoolInterface::class, $cache);
+        self::assertTrue($cache->clear());
 
         $provider = self::getContainer()->get(TestProvider::class);
         self::assertInstanceOf(TestProvider::class, $provider);
@@ -222,22 +225,22 @@ final class BrowserFlowTest extends WebTestCase
     public function test_a_hand_off_cache_failure_has_a_log_id_and_secure_error_page(): void
     {
         $this->recordLog();
+        $pool = $this->createMock(CacheItemPoolInterface::class);
+        $pool->method('getItem')->willThrowException(new RuntimeException('Provider cache unavailable.'));
+        self::getContainer()->set(ProviderCache::class, new ProviderCache(
+            $pool,
+            new LockFactory(new InMemoryStore()),
+        ));
         $id = $this->start(['900000001']);
-        $cache = self::getContainer()->getParameter('kernel.cache_dir');
-        self::assertIsString($cache);
-        file_put_contents($cache . '/jip-provider', 'not-a-directory');
-        try {
-            $this->client->request('GET', self::JIP . '/interrupt?nonce=' . $id);
-            self::assertResponseStatusCodeSame(500);
-            self::assertStringContainsString('internal_error', $this->bodyText());
-            self::assertStringContainsString($this->stored($id)->logId, $this->bodyText());
-            self::assertResponseHeaderSame('Cache-Control', 'no-store, private');
-            self::assertTrue($this->client->getResponse()->headers->has('Content-Security-Policy'));
-            self::assertSame(TransactionState::Pending, $this->stored($id)->state);
-            self::assertStringContainsString('RuntimeException', implode("\n", $this->logLines));
-        } finally {
-            unlink($cache . '/jip-provider');
-        }
+
+        $this->client->request('GET', self::JIP . '/interrupt?nonce=' . $id);
+        self::assertResponseStatusCodeSame(500);
+        self::assertStringContainsString('internal_error', $this->bodyText());
+        self::assertStringContainsString($this->stored($id)->logId, $this->bodyText());
+        self::assertResponseHeaderSame('Cache-Control', 'no-store, private');
+        self::assertTrue($this->client->getResponse()->headers->has('Content-Security-Policy'));
+        self::assertSame(TransactionState::Pending, $this->stored($id)->state);
+        self::assertStringContainsString('RuntimeException', implode("\n", $this->logLines));
     }
 
     public function test_a_replayed_callback_never_redeems_the_code_again(): void

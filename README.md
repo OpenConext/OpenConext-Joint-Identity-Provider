@@ -281,6 +281,12 @@ that interval, including when no usable document or keys are cached. Fresh keys 
 a failed refetch; expired metadata and keys are never used. The initial fetch still holds the cache
 lock for its network request, but queued callers do not each repeat the failed request.
 
+Provider metadata and keys are cached per node under `APP_SHARE_DIR` (`var/share` by default),
+separately for each application environment. Keep this directory across deployments; use an absolute
+path outside release directories when releases use different paths. `cache:clear` preserves these
+entries; invalidate them explicitly with `bin/console cache:pool:clear cache.jip_provider`.
+Sharing this cache across nodes also requires a shared lock backend.
+
 All browser responses use `Cache-Control: no-store` and `Referrer-Policy: no-referrer`.
 
 ## `POST /attributes`

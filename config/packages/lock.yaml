@@ -1,0 +1,4 @@
+framework:
+    lock:
+        # Local locks match the node-local filesystem pool. Change both together for shared storage.
+        jip_provider: 'flock://%kernel.share_dir%/locks'

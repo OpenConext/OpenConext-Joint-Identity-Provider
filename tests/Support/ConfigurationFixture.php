@@ -21,10 +21,13 @@ use OpenSSLAsymmetricKey;
 use OpenSSLCertificate;
 use OpenSSLCertificateSigningRequest;
 use RuntimeException;
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\Clock\NativeClock;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
+use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\Lock\Store\InMemoryStore;
 use Symfony\Component\Yaml\Yaml;
 
 /**
@@ -119,7 +122,8 @@ final class ConfigurationFixture
     {
         $http = new ProviderHttpClient(new MockHttpClient(static fn (): MockResponse => new MockResponse('', ['http_code' => 404])));
         $clock = new NativeClock();
-        $keys = new KeyResolver($http, new ProviderCache(sys_get_temp_dir() . '/jip-tests-unused-cache'), $clock);
+        $cache = new ProviderCache(new ArrayAdapter(), new LockFactory(new InMemoryStore()));
+        $keys = new KeyResolver($http, $cache, $clock);
 
         return new DeziProfile(
             new UserInfoReader($http),
