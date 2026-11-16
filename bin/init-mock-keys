@@ -1,14 +1,26 @@
 #!/usr/bin/env bash
 # Creates the mock client's test keys that config/jip/mock.yaml names, under keys/mock/ (git-ignored).
 # For the local mock DEZI only: never register these keys with DEZI or use them in acceptance or production.
+#
+#   bin/init-mock-keys                     the decryption key pair, needed with every authentication method
+#   bin/init-mock-keys --with-signing-key  also the client-assertion signing key pair, needed only for the
+#                                          optional private_key_jwt setup (config/jip/mock.yaml comments)
+#
 # Existing files are kept; delete keys/mock/ to start over.
 set -euo pipefail
+
+names=(ggd-decryption)
+case "${1:-}" in
+    '') ;;
+    --with-signing-key) names+=(ggd-signing) ;;
+    *) echo "usage: $0 [--with-signing-key]" >&2; exit 2 ;;
+esac
 
 dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)/keys/mock"
 umask 077
 mkdir -p "$dir"
 
-for name in ggd-signing ggd-decryption; do
+for name in "${names[@]}"; do
     if [[ -e "$dir/$name.pem" || -e "$dir/$name.crt" ]]; then
         echo "kept     keys/mock/$name.{pem,crt}"
         continue

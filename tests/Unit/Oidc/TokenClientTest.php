@@ -7,7 +7,6 @@ namespace JointIdentityProvider\Tests\Unit\Oidc;
 use JointIdentityProvider\Core\Configuration\JipConfiguration;
 use JointIdentityProvider\Oidc\OidcFailure;
 use JointIdentityProvider\Oidc\OidcFailureType;
-use JointIdentityProvider\Tests\Support\ConfigurationFixture as Fixture;
 use JointIdentityProvider\Tests\Support\OidcFixture;
 use JointIdentityProvider\Tests\Support\TestProvider;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -15,16 +14,28 @@ use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
 /**
- * The token request with `private_key_jwt` or `none` and the token-response checks (design §14, §18
- * "Client authentication").
+ * The token request with `none` (the DEZI method, from the committed mock configuration) or the explicit
+ * optional `private_key_jwt`, and the token-response checks (design §14, §18 "Client authentication").
  */
 final class TokenClientTest extends TestCase
 {
     private OidcFixture $oidc;
 
+    /** @var list<array{list<string|int>, mixed}> the changes that select the optional private_key_jwt */
+    private array $privateKeyJwt;
+
     protected function setUp(): void
     {
         $this->oidc = new OidcFixture();
+        $directory = $this->oidc->configFixture->directory;
+        $this->privateKeyJwt = [
+            [['provider', 'clients', 'ggd', 'authentication'], 'private_key_jwt'],
+            [['provider', 'clients', 'ggd', 'signing_key'], [
+                'certificate' => $directory . '/signing.crt',
+                'private_key' => $directory . '/signing.pem',
+                'assertion_lifetime_seconds' => 60,
+            ]],
+        ];
     }
 
     protected function tearDown(): void
@@ -34,7 +45,7 @@ final class TokenClientTest extends TestCase
 
     public function test_the_token_request_carries_a_fresh_signed_client_assertion(): void
     {
-        $configuration = $this->oidc->configuration();
+        $configuration = $this->oidc->configuration($this->privateKeyJwt);
         $this->exchange($configuration);
         $first = $this->oidc->provider->lastTokenRequestForm();
         $this->exchange($configuration);
@@ -81,6 +92,7 @@ final class TokenClientTest extends TestCase
     public function test_a_configured_kid_goes_into_the_assertion_header(): void
     {
         $configuration = $this->oidc->configuration([
+            ...$this->privateKeyJwt,
             [['provider', 'clients', 'ggd', 'signing_key', 'kid'], 'signing-2026'],
         ]);
 
@@ -93,23 +105,28 @@ final class TokenClientTest extends TestCase
 
     public function test_a_none_client_sends_no_assertion(): void
     {
-        $configuration = $this->oidc->configuration([
-            [['provider', 'clients', 'ggd', 'authentication'], 'none'],
-            [['provider', 'clients', 'ggd', 'signing_key'], Fixture::ABSENT],
-        ]);
+        $configuration = $this->oidc->configuration();
+        self::assertNull($configuration->provider->oidc->clients['ggd']->signingKey);
 
         $this->exchange($configuration);
 
-        $form = $this->oidc->provider->lastTokenRequestForm();
-        self::assertArrayNotHasKey('client_assertion', $form);
-        self::assertArrayNotHasKey('client_assertion_type', $form);
+        self::assertSame([
+            'grant_type' => 'authorization_code',
+            'code' => 'the-code',
+            'redirect_uri' => 'https://jip.dev.openconext.local/oidc/callback',
+            'code_verifier' => 'the-verifier',
+            'client_id' => TestProvider::CLIENT_ID,
+        ], $this->oidc->provider->lastTokenRequestForm());
     }
 
     public function test_an_unlisted_method_fails_before_any_token_request(): void
     {
+        // The explicit private_key_jwt client against a provider that lists only none: no fallback to none.
         $this->oidc->provider->discovery['token_endpoint_auth_methods_supported'] = ['none'];
 
-        self::assertSame(OidcFailureType::AuthenticationMethodNotSupported, $this->failure()->type);
+        $failure = $this->failure($this->oidc->configuration($this->privateKeyJwt));
+
+        self::assertSame(OidcFailureType::AuthenticationMethodNotSupported, $failure->type);
         self::assertSame(0, $this->oidc->provider->countRequests([TestProvider::TOKEN]));
     }
 
@@ -165,10 +182,10 @@ final class TokenClientTest extends TestCase
         );
     }
 
-    private function failure(): OidcFailure
+    private function failure(?JipConfiguration $configuration = null): OidcFailure
     {
         try {
-            $this->exchange($this->oidc->configuration());
+            $this->exchange($configuration ?? $this->oidc->configuration());
         } catch (OidcFailure $failure) {
             return $failure;
         }

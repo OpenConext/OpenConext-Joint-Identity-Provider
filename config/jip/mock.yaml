@@ -4,7 +4,8 @@
 # confirmed DEZI values; they never move into an acceptance or production configuration (design §16, §17).
 # Switching to DEZI acceptance changes the `provider` block and `environment` only.
 #
-# Keys: run bin/init-mock-keys first. Secrets come from the environment, never from this file.
+# Keys: run bin/init-mock-keys first (decryption key only; --with-signing-key adds the optional
+# private_key_jwt signing key). Secrets come from the environment, never from this file.
 environment: mock
 engineblock:
   api_token: '%env(EB_API_TOKEN)%'
@@ -46,14 +47,20 @@ provider:
     decision_validity_seconds: 60
   clients:
     ggd:
-      client_id: 'jip-mock-ggd'       # mock assumption: the mock's client registration
+      client_id: 'jip-mock-ggd'       # mock assumption: the mock's client registration (authentication none)
       redirect_uri: 'https://jip.dev.openconext.local/oidc/callback'   # as registered at the mock
-      authentication: private_key_jwt
-      signing_key:
-        certificate: 'keys/mock/ggd-signing.crt'
-        private_key: 'keys/mock/ggd-signing.pem'
-        assertion_lifetime_seconds: 60
-      decryption_keys:
+      authentication: none            # the DEZI method: open client, protected by PKCE S256 (design §10, §14)
+      # Optional private_key_jwt (design §14), against the mock's separate registration jip-mock-ggd-jwt:
+      # run bin/init-mock-keys --with-signing-key, enable that registration as mock-dezi/README.md describes,
+      # then use these lines instead of client_id and authentication above, and set
+      # provider.envelope.audiences.ggd to 'jip-mock-ggd-jwt-envelope'.
+      # client_id: 'jip-mock-ggd-jwt'
+      # authentication: private_key_jwt
+      # signing_key:
+      #   certificate: 'keys/mock/ggd-signing.crt'
+      #   private_key: 'keys/mock/ggd-signing.pem'
+      #   assertion_lifetime_seconds: 60
+      decryption_keys:                # required with either method
         - certificate: 'keys/mock/ggd-decryption.crt'
           private_key: 'keys/mock/ggd-decryption.pem'
 attributes:

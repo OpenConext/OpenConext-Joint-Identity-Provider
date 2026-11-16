@@ -102,7 +102,7 @@ final class BrowserFlowTest extends WebTestCase
         self::assertNotSame($query['state'], $query['nonce']);
 
         $transaction = $this->stored($id);
-        self::assertSame(TransactionState::AtProvider, $transaction->state);
+        self::assertSame(TransactionState::AtDezi, $transaction->state);
         $attempt = $transaction->attempt;
         self::assertNotNull($attempt);
         self::assertSame($query['state'], $attempt->oidcState);
@@ -199,7 +199,9 @@ final class BrowserFlowTest extends WebTestCase
         $form = $this->provider->lastTokenRequestForm();
         self::assertSame('the-code', $form['code']);
         self::assertSame($transaction->attempt?->pkceVerifier, $form['code_verifier']);
-        self::assertArrayHasKey('client_assertion', $form);
+        self::assertSame(TestProvider::CLIENT_ID, $form['client_id']);
+        self::assertArrayNotHasKey('client_assertion', $form, 'The none client sends no assertion.');
+        self::assertArrayNotHasKey('client_assertion_type', $form);
         self::assertNull($this->cookie($transaction), 'The callback removes the transaction cookie.');
     }
 
@@ -357,7 +359,7 @@ final class BrowserFlowTest extends WebTestCase
         $this->returnFromProvider(['code' => 'the-code']);
         self::assertResponseStatusCodeSame(400);
 
-        self::assertSame(TransactionState::AtProvider, $this->stored($id)->state);
+        self::assertSame(TransactionState::AtDezi, $this->stored($id)->state);
         self::assertSame(0, $this->provider->countRequests([TestProvider::TOKEN]));
     }
 
@@ -383,7 +385,7 @@ final class BrowserFlowTest extends WebTestCase
         $this->returnFromProvider(['code' => 'the-code', 'state' => $query['state']]);
         self::assertResponseStatusCodeSame(400);
 
-        self::assertSame(TransactionState::AtProvider, $this->stored($id)->state);
+        self::assertSame(TransactionState::AtDezi, $this->stored($id)->state);
         self::assertSame(0, $this->provider->countRequests([TestProvider::TOKEN]));
         $this->assertCallbackRejections($transaction, 2);
     }
@@ -399,7 +401,7 @@ final class BrowserFlowTest extends WebTestCase
         $this->returnFromProvider(['code' => 'code-2', 'state' => $secondQuery['state']]);
 
         self::assertSame(TransactionState::Failed, $this->stored($second)->state);
-        self::assertSame(TransactionState::AtProvider, $this->stored($first)->state);
+        self::assertSame(TransactionState::AtDezi, $this->stored($first)->state);
         self::assertSame($this->stored($first)->attempt?->cookieValue, $this->cookie($this->stored($first)));
 
         $this->provider->nonce = $firstQuery['nonce'];
@@ -419,8 +421,8 @@ final class BrowserFlowTest extends WebTestCase
         $this->returnFromProvider(['code' => 'the-code', 'state' => $firstQuery['state']]);
 
         self::assertStringContainsString('callback_mismatch', $this->bodyText());
-        self::assertSame(TransactionState::AtProvider, $this->stored($first)->state);
-        self::assertSame(TransactionState::AtProvider, $this->stored($second)->state);
+        self::assertSame(TransactionState::AtDezi, $this->stored($first)->state);
+        self::assertSame(TransactionState::AtDezi, $this->stored($second)->state);
     }
 
     public function test_an_invalid_id_token_fails_the_transaction_before_the_profile(): void
@@ -491,6 +493,18 @@ final class BrowserFlowTest extends WebTestCase
 
     public function test_an_unlisted_authentication_method_stops_before_the_provider(): void
     {
+        // The explicit optional private_key_jwt client; the provider lists only none, and JIP does not fall back.
+        $data = Fixture::with(
+            $this->fixture->mockConfiguration(),
+            ['provider', 'clients', 'ggd', 'authentication'],
+            'private_key_jwt',
+        );
+        $data = Fixture::with($data, ['provider', 'clients', 'ggd', 'signing_key'], [
+            'certificate' => $this->fixture->directory . '/signing.crt',
+            'private_key' => $this->fixture->directory . '/signing.pem',
+            'assertion_lifetime_seconds' => 60,
+        ]);
+        $this->fixture->writeConfiguration($data);
         $id = $this->start(['900000001']);
         $this->provider->discovery['token_endpoint_auth_methods_supported'] = ['none'];
 
@@ -513,8 +527,8 @@ final class BrowserFlowTest extends WebTestCase
         self::assertStringContainsString('expired', $this->bodyText());
         self::assertSame([self::RESTART_URL], $this->links());
         self::assertSame(0, $this->provider->countRequests([TestProvider::TOKEN]));
-        self::assertSame(TransactionState::AtProvider, $this->stored($id)->state);
-        $this->assertExpiredLog('callback', $this->stored($id)->logId, TransactionState::AtProvider);
+        self::assertSame(TransactionState::AtDezi, $this->stored($id)->state);
+        $this->assertExpiredLog('callback', $this->stored($id)->logId, TransactionState::AtDezi);
     }
 
     public function test_a_verified_profile_outcome_still_needs_the_account_binding(): void
@@ -722,7 +736,7 @@ final class BrowserFlowTest extends WebTestCase
      */
     public static function expiredCallbackWrites(): iterable
     {
-        yield 'claiming the callback' => [TransactionState::AtProvider, false];
+        yield 'claiming the callback' => [TransactionState::AtDezi, false];
         yield 'recording success' => [TransactionState::Validating, false];
         yield 'recording failure' => [TransactionState::Validating, true];
     }

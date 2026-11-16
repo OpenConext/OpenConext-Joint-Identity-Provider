@@ -25,7 +25,7 @@ Paths starting with `devenv/` or `docs/` in this README refer to that repository
 | Part | Namespace | Holds | DEZI-specific |
 | --- | --- | --- | --- |
 | Core | `JointIdentityProvider\Core` | configuration contract and startup checks, claim mapping, account binding, service policies, transaction store, profile interfaces, result delivery, `/health`, `jip:config:validate` | No. Claim and attribute names come from the configuration or from the profile |
-| OIDC client | `JointIdentityProvider\Oidc` | discovery, authorisation with PKCE, token exchange, client assertions, signing-key cache, ID-token and signed-message validation | No |
+| OIDC client | `JointIdentityProvider\Oidc` | discovery, authorisation with PKCE, token exchange (`none`, or optional `private_key_jwt` client assertions), signing-key cache, ID-token and signed-message validation | No |
 | Shared configuration readers | `JointIdentityProvider\Configuration` | `ConfigNode` and `ConfigurationErrors`, used by every part to read and report on the configuration tree | No |
 | DEZI profile | `JointIdentityProvider\Profile\Dezi` | `provider.profile: dezi`: UserInfo decryption, envelope and statement checks, the status check and its renewal, its message types (`envelope`, `statement`), releasable claims, binding claim `dezi_nummer`, `expected_assurance`, `envelope`, `statement`, `revocation` | Yes |
 
@@ -57,7 +57,7 @@ store uses `READ COMMITTED`, which InnoDB cannot write under statement-only bina
 
 ```bash
 composer install
-bin/init-mock-keys                                    # test keys under keys/mock/ (git-ignored)
+bin/init-mock-keys                                    # the test decryption key under keys/mock/ (git-ignored)
 cp .env.local.dist .env.local                         # selects dev; fill in EB_API_TOKEN (>= 32 characters)
 bin/console jip:config:validate                       # the startup checks; exit 1 on any problem
 bin/console jip:store:init                            # create the table before serving requests
@@ -108,6 +108,25 @@ configured values. The command prints them; `/health` logs them and returns only
 - `engineblock.return_url_prefix` must include a path and have no query or fragment. Both the
   start call and the skipped hand-off validate the return URL's scheme, host, port and exact path
   against the configured prefix before accepting it or redirecting.
+
+**Client authentication** (design §10, §14). `provider.clients.<id>.authentication` must be set
+explicitly; there is no default.
+
+- `none` is the DEZI method: the CIBG treats JIP as an open client. The token request carries
+  `grant_type`, `code`, `redirect_uri`, `code_verifier` and `client_id`, and no client assertion. A
+  `signing_key` is refused with `none`. `acceptance.yaml.dist` and `mock.yaml` use it.
+- `private_key_jwt` is an explicit option, only if the CIBG asks for it. It requires `signing_key`
+  (`certificate`, `private_key`, optional `kid`, `assertion_lifetime_seconds`) and adds
+  `client_assertion_type` and a fresh `RS256` `client_assertion` to every token request. How DEZI
+  registers the signing key and what the assertion must contain are open CIBG questions (§10).
+- PKCE `S256` is sent with every authorisation request and cannot be switched off.
+- `decryption_keys` are required with either method: DEZI encrypts UserInfo for the registered
+  certificate.
+- The configured method must appear in discovery's `token_endpoint_auth_methods_supported`; a
+  missing list supports no method. Otherwise the login fails with
+  `authentication_method_not_supported` before the token request. JIP never derives the method from
+  discovery and never retries with another method; `invalid_client` fails with
+  `client_authentication_refused`.
 
 **DEZI profile settings beyond the §17 sample** (design §14, §16). The §17 sample has no place for
 these DEZI contract points, so `provider` carries two profile-owned blocks:
@@ -307,7 +326,7 @@ EngineBlock's result call (design §12, §13): `{"nonce": …}` in, the attribut
   | `200` | `{"attributes": {<login_flag>: ["skipped"]}}` | a `skipped` transaction; no DEZI attribute |
   | `400` | `{"error":"invalid_request"}` | the body is not JSON |
   | `401` | `{"error":"unauthorized"}` | a missing or wrong `Authorization` header |
-  | `403` | `{"error":"forbidden"}` | `pending`, `at_provider`, `validating` or `failed`; or refused at delivery |
+  | `403` | `{"error":"forbidden"}` | `pending`, `at_dezi`, `validating` or `failed`; or refused at delivery |
   | `404` | `{"error":"not_found"}` | an unknown or malformed nonce, `consumed`, or past its deadline, also when that passes during the recheck |
   | `500` | `{"error":"internal_error"}` | an unexpected exception; logged by class only |
 
@@ -356,13 +375,31 @@ logged by class only.
 
 Tests replace the `jip.logger` service; `when@test` makes both loggers silent.
 
+## Upgrading: the `at_dezi` transaction state
+
+A transaction whose user is at DEZI has the state `at_dezi` (design §13); earlier versions stored
+`at_provider`. The state is part of each JSON record in `jip_transactions`, and a record with an
+unknown state fails closed: `/interrupt` answers `internal_error` and the callback fails. A node of
+either version therefore cannot read the other version's in-flight transactions, and a read alias in
+the new version alone would not make a mixed-version deployment safe (older nodes would still fail on
+`at_dezi`). Deploy the change in a coordinated way:
+
+1. Stop admitting new logins (no new `POST /authz` reaches JIP).
+2. Let the existing transactions finish or expire under their deadlines
+   (`transactions.lifetime_seconds`). Expired records are pruned without being decoded.
+3. Switch every connector node to the new version together, then admit logins again.
+
+Do not clear stored transactions as a shortcut. The schema is unchanged; `jip:store:init` is not
+needed for this change.
+
 ## Open before acceptance
 
 - **CIBG answers (design §10).** The acceptance placeholders stay until the CIBG supplies a dated
   confirmation of: the approved key address per message type, the expected issuers, the
-  `loa_authn` and `loa_dezi` values, the client ID, the client-authentication method
-  (`private_key_jwt` or `none`), how the signing key is registered, `max_age` support, and whether
-  `auth_time` is always returned. The DEZI profile adds: the envelope claim that carries the
+  `loa_authn` and `loa_dezi` values, the client ID, `max_age` support, and whether `auth_time` is
+  always returned. The client-authentication method is answered: `none` (open client, 13 November
+  2026). Only if the CIBG asks for the optional `private_key_jwt` do its signing-key registration and
+  assertion contents need answers. The DEZI profile adds: the envelope claim that carries the
   statement (`provider.envelope.statement_claim`), the subject association between UserInfo and the
   ID token (`provider.envelope.subject_association`; `access_token` needs an approved contract), the
   envelope audience per client (`provider.envelope.audiences`), which optional claims may be `null`
@@ -384,9 +421,13 @@ Tests replace the `jip.logger` service; `when@test` makes both loggers silent.
 Private keys and certificates never enter version control: `keys/`, `*.pem`, `*.key`, `*.p12` and
 `*.pfx` are git-ignored.
 
-- **Mock:** `bin/init-mock-keys` creates a signing and a decryption key pair (RSA 3072, one year,
-  private keys mode 600, directories mode 700) for client `ggd`. It keeps existing files; delete
-  `keys/mock/` to start over. The mock DEZI needs the two certificates, never the private keys.
+- **Mock:** `bin/init-mock-keys` creates the decryption key pair (RSA 3072, one year, private keys
+  mode 600, directories mode 700) for client `ggd`, which uses `authentication: none`.
+  `bin/init-mock-keys --with-signing-key` also creates the signing key pair, needed only for the
+  optional `private_key_jwt` setup described in `config/jip/mock.yaml`. It keeps existing files;
+  delete `keys/mock/` to start over. The mock DEZI needs the certificates, never the private keys.
+  These connector client keys are distinct from the mock DEZI provider's own message-signing keys
+  (`mock-dezi/bin/init-keys`), which it always needs.
 - **Container access (devconf):** `devenv/bin/setup.sh` runs `bin/init-mock-keys` and grants the
   container's web-server user (`www-data`, uid 33) ACL access only: search (`--x`) on `keys/` and
   `keys/mock/`, read on the key files, and read-write on `var/` with inherited default ACLs. Modes
@@ -394,8 +435,10 @@ Private keys and certificates never enter version control: `keys/`, `*.pem`, `*.
   keys. `devenv/bin/check.sh` verifies the ACLs. The front controllers set umask `027`, because
   Symfony Runtime sets umask `0` in debug mode.
 - **Acceptance and production:** the operator places the keys outside the repository (the template
-  uses `/etc/jip/keys/`) and follows the replacement order in design §14. The decryption certificate
-  is registered with the CIBG. How the signing key is registered is open (design §10).
+  uses `/etc/jip/keys/`), monitors certificate expiry and follows the replacement orders in design
+  §14. The decryption keys are always required and their certificate is registered with the CIBG.
+  A signing key, its registration and its rotation apply only with `private_key_jwt`; how DEZI
+  registers it is open (design §10).
 
 ## Quality checks
 
@@ -403,6 +446,18 @@ Private keys and certificates never enter version control: `keys/`, `*.pem`, `*.
 APP_ENV=test composer check  # lint:yaml, lint:container, phpcs, phpstan (level max), deptrac, phpunit, dependency audit
 composer run dependency-audit  # dependency audit only, against composer.lock
 ```
+
+With the local POC containers already running, use these commands from the `jip-dev` repository root:
+
+```bash
+devenv/bin/check-container.sh jip           # the same check suite inside the mounted connector container
+devenv/bin/check-container.sh jip phpunit   # tests only, using the dedicated jip_test database
+```
+
+The wrapper runs as `www-data`, clears the runtime application settings, selects the test environment
+and database, and gives the tools writable temporary caches. Container PHP includes `pdo_mysql`, so
+the host extension is optional for this workflow. See `devenv/README.md` in `jip-dev` for the environment
+overrides and individual check commands.
 
 Configuration for PHP_CodeSniffer (PSR-12 plus the EngineBlock Slevomat rules) and PHPStan is in
 `ci/qa-config/`. `devenv/bin/check.sh` also runs `jip:config:validate` on the mock configuration.

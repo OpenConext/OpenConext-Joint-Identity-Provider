@@ -21,7 +21,7 @@ use Throwable;
 
 /**
  * The browser hand-off from EngineBlock (design §3, §12, §13). A pending transaction moves to
- * `at_provider` in one atomic step and the browser goes to the provider; a skipped transaction goes
+ * `at_dezi` in one atomic step and the browser goes to the provider; a skipped transaction goes
  * straight back to EngineBlock's return URL, without the provider and without a cookie.
  */
 final readonly class HandOff
@@ -116,8 +116,8 @@ final readonly class HandOff
             );
         }
 
-        $atProvider = $transaction->atProvider($attempt);
-        if (!$this->store->compareAndSet($transaction->id, TransactionState::Pending, $atProvider, $now)) {
+        $atDezi = $transaction->atDezi($attempt);
+        if (!$this->store->compareAndSet($transaction->id, TransactionState::Pending, $atDezi, $now)) {
             $current = $this->store->find($transaction->id);
 
             if ($current === null && !$transaction->isExpired($this->clock->now())) {
@@ -129,7 +129,7 @@ final readonly class HandOff
 
         $this->logger->info('JIP hand-off {log_id}: to the provider', ['log_id' => $transaction->logId]);
 
-        return BrowserOutcome::redirect($url, $atProvider, $attempt->cookieValue);
+        return BrowserOutcome::redirect($url, $atDezi, $attempt->cookieValue);
     }
 
     private function returnToEngineBlock(Transaction $transaction, JipConfiguration $configuration): BrowserOutcome

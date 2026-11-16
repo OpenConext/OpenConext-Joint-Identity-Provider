@@ -44,8 +44,8 @@ final class ValidateConfigurationCommandTest extends KernelTestCase
         $base = $this->fixture->writeKeyPair('expired', days: 0);
         $configuration = ConfigurationFixture::with(
             $this->fixture->mockConfiguration(),
-            ['provider', 'clients', 'ggd', 'signing_key'],
-            ['certificate' => $base . '.crt', 'private_key' => $base . '.pem', 'assertion_lifetime_seconds' => 60],
+            ['provider', 'clients', 'ggd', 'decryption_keys', 0],
+            ['certificate' => $base . '.crt', 'private_key' => $base . '.pem'],
         );
         ConfigurationFixture::setEnv('JIP_CONFIG_FILE', $this->fixture->writeConfiguration($configuration));
         $tester = $this->tester();

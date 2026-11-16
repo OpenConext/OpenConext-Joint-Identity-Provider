@@ -71,7 +71,7 @@ final class HandOffTest extends TestCase
         self::assertFalse($outcome->clearCookie);
 
         $stored = $this->store->find(self::ID);
-        self::assertSame(TransactionState::AtProvider, $stored?->state);
+        self::assertSame(TransactionState::AtDezi, $stored?->state);
         self::assertEquals($this->attempt, $stored->attempt);
         self::assertSame($stored, $outcome->cookieTransaction);
     }
@@ -125,7 +125,7 @@ final class HandOffTest extends TestCase
     {
         $pending = $this->transaction(TransactionState::Pending);
         $this->store->add($pending);
-        $this->store->concurrentChange = $pending->atProvider($this->attempt);
+        $this->store->concurrentChange = $pending->atDezi($this->attempt);
 
         $outcome = $this->handOff()->start(self::ID, $this->configuration);
 

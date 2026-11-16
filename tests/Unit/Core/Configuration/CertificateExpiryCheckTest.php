@@ -23,10 +23,23 @@ final class CertificateExpiryCheckTest extends TestCase
         $this->fixture = new ConfigurationFixture();
         ConfigurationFixture::setEnv('EB_API_TOKEN', ConfigurationFixture::API_TOKEN);
 
-        // The fixture's certificates are valid for 365 days; the warning window is 60 days.
-        $this->configuration = ConfigurationFixture::loader(
-            $this->fixture->writeConfiguration($this->fixture->mockConfiguration()),
-        )->load();
+        // The fixture's certificates are valid for 365 days; the warning window is 60 days. The client uses
+        // private_key_jwt explicitly, so its optional signing certificate is monitored next to decryption.
+        $configuration = ConfigurationFixture::with(
+            $this->fixture->mockConfiguration(),
+            ['provider', 'clients', 'ggd', 'authentication'],
+            'private_key_jwt',
+        );
+        $configuration = ConfigurationFixture::with(
+            $configuration,
+            ['provider', 'clients', 'ggd', 'signing_key'],
+            [
+                'certificate' => $this->fixture->directory . '/signing.crt',
+                'private_key' => $this->fixture->directory . '/signing.pem',
+                'assertion_lifetime_seconds' => 60,
+            ],
+        );
+        $this->configuration = ConfigurationFixture::loader($this->fixture->writeConfiguration($configuration))->load();
     }
 
     protected function tearDown(): void

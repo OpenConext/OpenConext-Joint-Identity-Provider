@@ -54,10 +54,10 @@ final class LoginCallbackTest extends TestCase
     #[DataProvider('unknownStates')]
     public function test_an_invalid_or_unknown_state_is_unknown(array $query): void
     {
-        $this->store->add($this->transaction(TransactionState::AtProvider));
+        $this->store->add($this->transaction(TransactionState::AtDezi));
 
         self::assertSame(BrowserOutcomeType::Unknown, $this->complete($query)->type);
-        self::assertSame(TransactionState::AtProvider, $this->store->find(self::ID)?->state);
+        self::assertSame(TransactionState::AtDezi, $this->store->find(self::ID)?->state);
     }
 
     /**
@@ -85,13 +85,13 @@ final class LoginCallbackTest extends TestCase
 
     public function test_an_expired_transaction_is_refused_unchanged(): void
     {
-        $this->store->add($this->transaction(TransactionState::AtProvider));
+        $this->store->add($this->transaction(TransactionState::AtDezi));
         $this->oidc->clock->sleep(601);
 
         $outcome = $this->complete(['state' => self::STATE, 'code' => 'the-code']);
 
         self::assertSame('expired', $outcome->failureType);
-        self::assertSame(TransactionState::AtProvider, $this->store->find(self::ID)?->state);
+        self::assertSame(TransactionState::AtDezi, $this->store->find(self::ID)?->state);
     }
 
     /**
@@ -100,14 +100,14 @@ final class LoginCallbackTest extends TestCase
     #[DataProvider('mismatchedCookies')]
     public function test_a_missing_or_wrong_cookie_changes_nothing(array $cookies): void
     {
-        $this->store->add($this->transaction(TransactionState::AtProvider));
+        $this->store->add($this->transaction(TransactionState::AtDezi));
 
         $outcome = $this->complete(['state' => self::STATE, 'code' => 'the-code'], $cookies);
 
         self::assertSame('callback_mismatch', $outcome->failureType);
         self::assertSame(400, $outcome->status);
         self::assertFalse($outcome->clearCookie);
-        self::assertSame(TransactionState::AtProvider, $this->store->find(self::ID)?->state);
+        self::assertSame(TransactionState::AtDezi, $this->store->find(self::ID)?->state);
         self::assertSame(0, $this->oidc->provider->countRequests([TestProvider::TOKEN]));
     }
 
@@ -124,7 +124,7 @@ final class LoginCallbackTest extends TestCase
 
     public function test_a_callback_for_a_transaction_that_is_not_at_the_provider_changes_nothing(): void
     {
-        $this->store->add($this->transaction(TransactionState::AtProvider)->validating());
+        $this->store->add($this->transaction(TransactionState::AtDezi)->validating());
 
         $outcome = $this->complete(['state' => self::STATE, 'code' => 'the-code']);
 
@@ -134,9 +134,9 @@ final class LoginCallbackTest extends TestCase
 
     public function test_a_lost_race_to_validating_changes_nothing_and_keeps_the_cookie(): void
     {
-        $atProvider = $this->transaction(TransactionState::AtProvider);
-        $this->store->add($atProvider);
-        $this->store->concurrentChange = $atProvider->validating();
+        $atDezi = $this->transaction(TransactionState::AtDezi);
+        $this->store->add($atDezi);
+        $this->store->concurrentChange = $atDezi->validating();
 
         $outcome = $this->complete(['state' => self::STATE, 'code' => 'the-code']);
 
@@ -154,7 +154,7 @@ final class LoginCallbackTest extends TestCase
         string $failureType,
         bool $restartable,
     ): void {
-        $this->store->add($this->transaction(TransactionState::AtProvider));
+        $this->store->add($this->transaction(TransactionState::AtDezi));
 
         $outcome = $this->complete(['state' => self::STATE] + $query);
 
@@ -183,7 +183,7 @@ final class LoginCallbackTest extends TestCase
 
     public function test_a_missing_profile_fails_the_transaction_as_not_configured(): void
     {
-        $this->store->add($this->transaction(TransactionState::AtProvider));
+        $this->store->add($this->transaction(TransactionState::AtDezi));
 
         $outcome = $this->complete(['state' => self::STATE, 'code' => 'the-code'], profiles: new ProfileRegistry([]));
 
@@ -195,7 +195,7 @@ final class LoginCallbackTest extends TestCase
 
     public function test_an_unexpected_exception_is_an_internal_error_and_fails_the_transaction(): void
     {
-        $this->store->add($this->transaction(TransactionState::AtProvider));
+        $this->store->add($this->transaction(TransactionState::AtDezi));
         $this->oidc->provider->answers[TestProvider::TOKEN] = static fn () => throw new RuntimeException('boom');
 
         $outcome = $this->complete(['state' => self::STATE, 'code' => 'the-code']);
@@ -239,13 +239,13 @@ final class LoginCallbackTest extends TestCase
             $now->modify('+600 seconds'),
             TransactionState::Pending,
         );
-        $atProvider = $pending->atProvider(
+        $atDezi = $pending->atDezi(
             new ProviderAttempt(self::STATE, str_repeat('n', 43), str_repeat('v', 43), self::COOKIE, $now),
         );
 
         return match ($state) {
-            TransactionState::AtProvider => $atProvider,
-            TransactionState::Consumed => $atProvider->consumed(),
+            TransactionState::AtDezi => $atDezi,
+            TransactionState::Consumed => $atDezi->consumed(),
             default => throw new RuntimeException('Not a state these tests start from.'),
         };
     }

@@ -206,7 +206,7 @@ final class UserInfoReaderTest extends TestCase
                 TestProvider::TOKEN,
                 TestProvider::ID_TOKEN_JWKS,
                 TestProvider::USERINFO,
-                ['private_key_jwt'],
+                ['none', 'private_key_jwt'],
             ),
             new IdTokenClaims(TestProvider::SUBJECT, $now->getTimestamp(), []),
             'test-access-token',

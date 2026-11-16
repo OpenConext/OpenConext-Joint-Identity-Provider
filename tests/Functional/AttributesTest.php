@@ -225,7 +225,7 @@ final class AttributesTest extends WebTestCase
 
         $this->handOff($id);
         self::assertSame(403, $this->deliver($id)[0]);
-        self::assertSame(TransactionState::AtProvider, $this->stored($id)->state);
+        self::assertSame(TransactionState::AtDezi, $this->stored($id)->state);
     }
 
     public function test_a_failed_binding_releases_nothing(): void

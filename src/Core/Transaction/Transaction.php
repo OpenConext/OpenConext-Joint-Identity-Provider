@@ -36,9 +36,9 @@ final readonly class Transaction
     ) {
     }
 
-    public function atProvider(ProviderAttempt $attempt): self
+    public function atDezi(ProviderAttempt $attempt): self
     {
-        return $this->replace(TransactionState::AtProvider, $attempt, null, false, null, $this->resultDeadline);
+        return $this->replace(TransactionState::AtDezi, $attempt, null, false, null, $this->resultDeadline);
     }
 
     public function validating(): self

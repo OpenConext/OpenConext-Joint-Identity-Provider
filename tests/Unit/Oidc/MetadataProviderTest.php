@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace JointIdentityProvider\Tests\Unit\Oidc;
 
+use JointIdentityProvider\Oidc\Configuration\ClientAuthentication;
 use JointIdentityProvider\Oidc\OidcFailure;
 use JointIdentityProvider\Oidc\OidcFailureType;
 use JointIdentityProvider\Tests\Support\OidcFixture;
@@ -118,6 +119,9 @@ final class MetadataProviderTest extends TestCase
         $metadata = $this->oidc->metadata()->load($provider->oidc, $provider->trust);
 
         self::assertSame([], $metadata->tokenEndpointAuthMethods);
+        $client = $provider->oidc->clients['ggd'];
+        self::assertSame(ClientAuthentication::None, $client->authentication);
+        self::assertFalse($metadata->supports($client->authentication), 'none is not assumed when the list is missing');
     }
 
     #[DataProvider('failedFetches')]

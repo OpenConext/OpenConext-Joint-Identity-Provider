@@ -26,7 +26,7 @@ use Throwable;
 
 /**
  * The provider's `redirect_uri` (design §3, §13, §14). `state` and the transaction's own cookie must
- * match an `at_provider` transaction before anything else happens; a mismatch changes no transaction.
+ * match an `at_dezi` transaction before anything else happens; a mismatch changes no transaction.
  * The transaction then moves to `validating` in one atomic step, so a callback is processed once. Any
  * failed check moves it to `failed`. Success needs the profile and the core's own checks.
  */
@@ -80,14 +80,14 @@ final readonly class LoginCallback
 
         $cookie = $cookies[$transaction->logId] ?? null;
         if (
-            $transaction->state !== TransactionState::AtProvider || $transaction->attempt === null
+            $transaction->state !== TransactionState::AtDezi || $transaction->attempt === null
             || !is_string($cookie) || !hash_equals($transaction->attempt->cookieValue, $cookie)
         ) {
             return $this->restartable(FailureType::CallbackMismatch, $transaction, $configuration);
         }
 
         $validating = $transaction->validating();
-        if (!$this->store->compareAndSet($transaction->id, TransactionState::AtProvider, $validating, $now)) {
+        if (!$this->store->compareAndSet($transaction->id, TransactionState::AtDezi, $validating, $now)) {
             return $this->notUpdated($transaction, $configuration);
         }
 

@@ -5,9 +5,14 @@
 # set CONNECTOR_ENVIRONMENT=acceptance. Mock values never belong here.
 #
 # The DEZI placeholders stay until the CIBG gives a dated confirmation (design §10) of: the key address
-# per message type, the expected issuers, loa_authn and loa_dezi, the client ID, the client-authentication
-# method, the signing-key registration, max_age support and whether auth_time is always returned, the envelope
-# claim that carries the statement, the envelope audience, the subject association and permitted null claims.
+# per message type, the expected issuers, loa_authn and loa_dezi, the client ID, max_age support and whether
+# auth_time is always returned, the envelope claim that carries the statement, the envelope audience, the
+# subject association and permitted null claims.
+#
+# Client authentication: the CIBG treats JIP as an open client, so `authentication: none` is the DEZI method
+# (design §10, §14). PKCE S256 is always sent and cannot be switched off. `private_key_jwt` is an explicit
+# option, only if the CIBG asks for it later; its signing-key registration and assertion contents are open CIBG
+# questions (§10) that apply only to that option.
 environment: acceptance
 engineblock:
   api_token: '%env(EB_API_TOKEN)%'
@@ -51,12 +56,16 @@ provider:
     ggd:
       client_id: '<from DEZI registration>'
       redirect_uri: '<registered JIP redirect URI>'   # the return address registered with the CIBG (§10)
-      authentication: private_key_jwt # or none, only when the CIBG confirms DEZI wants no client authentication (§14)
-      signing_key:
-        certificate: '/etc/jip/keys/ggd-signing-2026.crt'
-        private_key: '/etc/jip/keys/ggd-signing-2026.pem'
-        # kid: '<as the CIBG confirms>'
-        assertion_lifetime_seconds: 60
+      authentication: none            # open client, protected by PKCE S256 (§10, §14)
+      # Only with `authentication: private_key_jwt`, and only after the CIBG answers how the signing key is
+      # registered and what the assertion must contain (§10). JIP refuses a signing_key with `none`.
+      # signing_key:
+      #   certificate: '/etc/jip/keys/ggd-signing-2026.crt'
+      #   private_key: '/etc/jip/keys/ggd-signing-2026.pem'
+      #   # kid: '<as the CIBG confirms>'
+      #   assertion_lifetime_seconds: 60
+      # Required with either method: DEZI encrypts UserInfo for the registered certificate. Monitor expiry
+      # and replace them in the order of design §14.
       decryption_keys:                # newest first; every entry decrypts (§14)
         - certificate: '/etc/jip/keys/ggd-2026.crt'
           private_key: '/etc/jip/keys/ggd-2026.pem'

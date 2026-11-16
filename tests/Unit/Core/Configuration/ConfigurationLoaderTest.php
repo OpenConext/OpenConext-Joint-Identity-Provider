@@ -89,8 +89,8 @@ final class ConfigurationLoaderTest extends TestCase
         self::assertSame(['id_token', 'envelope', 'statement'], array_keys($configuration->provider->trust->expectedIssuers));
         $client = $configuration->provider->oidc->clients['ggd'];
         self::assertSame('https://jip.dev.openconext.local/oidc/callback', $client->redirectUri);
-        self::assertSame(ClientAuthentication::PrivateKeyJwt, $client->authentication);
-        self::assertSame(60, $client->signingKey?->assertionLifetimeSeconds);
+        self::assertSame(ClientAuthentication::None, $client->authentication);
+        self::assertNull($client->signingKey);
         self::assertCount(1, $client->decryptionKeys);
         self::assertSame('dezi_nummer', $configuration->binding->claim);
         self::assertCount(8, $configuration->attributes->claims);
@@ -139,8 +139,6 @@ final class ConfigurationLoaderTest extends TestCase
             [['provider', 'envelope', 'subject_association'], 'envelope_sub'],
             [['provider', 'envelope', 'audiences', 'ggd'], 'acceptance-client'],
             [['provider', 'clients', 'ggd', 'client_id'], 'acceptance-client'],
-            [['provider', 'clients', 'ggd', 'signing_key', 'certificate'], $this->fixture->directory . '/signing.crt'],
-            [['provider', 'clients', 'ggd', 'signing_key', 'private_key'], $this->fixture->directory . '/signing.pem'],
             [['provider', 'clients', 'ggd', 'decryption_keys', 0, 'certificate'], $this->fixture->directory . '/decryption.crt'],
             [['provider', 'clients', 'ggd', 'decryption_keys', 0, 'private_key'], $this->fixture->directory . '/decryption.pem'],
             [['transactions', 'store', 'host'], 'db.jip.example'],
@@ -161,7 +159,11 @@ final class ConfigurationLoaderTest extends TestCase
         }
         $path = $this->fixture->writeConfiguration($this->apply($template, $changes));
 
-        $store = Fixture::loader($path, 'acceptance')->load()->transactions->store;
+        $configuration = Fixture::loader($path, 'acceptance')->load();
+        $client = $configuration->provider->oidc->clients['ggd'];
+        self::assertSame(ClientAuthentication::None, $client->authentication);
+        self::assertNull($client->signingKey);
+        $store = $configuration->transactions->store;
 
         self::assertSame('mysql:host=db.jip.example;port=3306;dbname=jip_acceptance;charset=utf8mb4', $store->dsn());
         self::assertSame('jip_acceptance', $store->user);
@@ -193,6 +195,12 @@ final class ConfigurationLoaderTest extends TestCase
      */
     public static function validVariants(): iterable
     {
+        // The committed mock configuration uses none; private_key_jwt is chosen explicitly.
+        $privateKeyJwt = [
+            [[...self::CLIENT_PATH, 'authentication'], 'private_key_jwt'],
+            [self::SIGNING_KEY_PATH, static fn (Fixture $f): array => self::keyEntry($f, 'signing') + ['assertion_lifetime_seconds' => 60]],
+        ];
+
         yield 'an explicit empty organisation list is valid and denies all' => [
             [[[...self::SERVICE_PATH, 'allowed_organisations'], []]],
             static function (JipConfiguration $c): void {
@@ -205,10 +213,12 @@ final class ConfigurationLoaderTest extends TestCase
                 self::assertSame(['dezi_nummer', 'abonnee_nummer', 'rol_code'], $c->services[Fixture::SERVICE]->release);
             },
         ];
-        yield 'a none client without signing key' => [
-            [[[...self::CLIENT_PATH, 'authentication'], 'none'], [self::SIGNING_KEY_PATH, Fixture::ABSENT]],
+        yield 'an explicit private_key_jwt client with signing key' => [
+            $privateKeyJwt,
             static function (JipConfiguration $c): void {
-                self::assertNull($c->provider->oidc->clients['ggd']->signingKey);
+                $client = $c->provider->oidc->clients['ggd'];
+                self::assertSame(ClientAuthentication::PrivateKeyJwt, $client->authentication);
+                self::assertSame(60, $client->signingKey?->assertionLifetimeSeconds);
             },
         ];
         yield 'revocation timeout of exactly half the call timeout' => [
@@ -232,10 +242,13 @@ final class ConfigurationLoaderTest extends TestCase
             },
         ];
         yield 'the same key pair for signing and decryption' => [
-            [[
-                self::SIGNING_KEY_PATH,
-                static fn (Fixture $f): array => self::keyEntry($f, 'decryption') + ['assertion_lifetime_seconds' => 60],
-            ]],
+            [
+                [[...self::CLIENT_PATH, 'authentication'], 'private_key_jwt'],
+                [
+                    self::SIGNING_KEY_PATH,
+                    static fn (Fixture $f): array => self::keyEntry($f, 'decryption') + ['assertion_lifetime_seconds' => 60],
+                ],
+            ],
             static function (JipConfiguration $c): void {
                 self::assertCount(2, $c->clientKeyPairs());
             },
@@ -267,11 +280,12 @@ final class ConfigurationLoaderTest extends TestCase
 
     /**
      * @param list<string|int> $path
+     * @param list<array{list<string|int>, mixed}> $base changes applied before the invalid value
      */
     #[DataProvider('invalidVariants')]
-    public function test_invalid_variants_are_refused(array $path, mixed $value, string $expectedError): void
+    public function test_invalid_variants_are_refused(array $path, mixed $value, string $expectedError, array $base = []): void
     {
-        $configuration = $this->apply($this->fixture->mockConfiguration(), [[$path, $value]]);
+        $configuration = $this->apply($this->fixture->mockConfiguration(), [...$base, [$path, $value]]);
 
         $errors = self::errorsOf(fn () => $this->load($configuration));
 
@@ -279,10 +293,16 @@ final class ConfigurationLoaderTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{list<string|int>, mixed, string}>
+     * @return iterable<string, array{0: list<string|int>, 1: mixed, 2: string, 3?: list<array{list<string|int>, mixed}>}>
      */
     public static function invalidVariants(): iterable
     {
+        // The committed mock configuration uses none; signing-key checks need private_key_jwt chosen explicitly.
+        $privateKeyJwt = [
+            [[...self::CLIENT_PATH, 'authentication'], 'private_key_jwt'],
+            [self::SIGNING_KEY_PATH, static fn (Fixture $f): array => self::keyEntry($f, 'signing') + ['assertion_lifetime_seconds' => 60]],
+        ];
+
         yield 'unknown environment' => [['environment'], 'staging', 'environment: must be mock, acceptance or production'];
 
         // Placeholders and environment references
@@ -628,6 +648,7 @@ final class ConfigurationLoaderTest extends TestCase
             self::SIGNING_KEY_PATH,
             static fn (Fixture $f): array => self::keyEntry($f, 'weak', bits: 1024) + ['assertion_lifetime_seconds' => 60],
             'provider.clients.ggd.signing_key.private_key: must be an RSA key of at least 2048 bits',
+            $privateKeyJwt,
         ];
         yield 'unknown client authentication' => [
             [...self::CLIENT_PATH, 'authentication'],
@@ -635,23 +656,25 @@ final class ConfigurationLoaderTest extends TestCase
             'provider.clients.ggd.authentication: must be private_key_jwt or none',
         ];
         yield 'private_key_jwt client without signing key' => [
-            self::SIGNING_KEY_PATH,
-            Fixture::ABSENT,
+            [...self::CLIENT_PATH, 'authentication'],
+            'private_key_jwt',
             'provider.clients.ggd.signing_key: is required with private_key_jwt',
         ];
         yield 'unreadable signing private key' => [
             [...self::SIGNING_KEY_PATH, 'private_key'],
             static fn (Fixture $f): string => $f->directory . '/absent.pem',
             'provider.clients.ggd.signing_key.private_key: names a file that cannot be read',
+            $privateKeyJwt,
         ];
         yield 'signing private key that does not match its certificate' => [
             [...self::SIGNING_KEY_PATH, 'private_key'],
             static fn (Fixture $f): string => $f->writeKeyPair('other') . '.pem',
             'provider.clients.ggd.signing_key.private_key: does not match its certificate',
+            $privateKeyJwt,
         ];
         yield 'none client with signing key' => [
-            [...self::CLIENT_PATH, 'authentication'],
-            'none',
+            self::SIGNING_KEY_PATH,
+            static fn (Fixture $f): array => self::keyEntry($f, 'signing') + ['assertion_lifetime_seconds' => 60],
             'provider.clients.ggd.signing_key: must be absent with authentication none',
         ];
         yield 'no clients' => [['provider', 'clients'], [], 'provider.clients: must hold at least one client'];
@@ -753,6 +776,7 @@ final class ConfigurationLoaderTest extends TestCase
                     $path,
                     $value,
                     $name . ($value === Fixture::ABSENT ? ': is missing' : ': must be a positive integer'),
+                    array_slice($path, 0, 4) === self::SIGNING_KEY_PATH ? $privateKeyJwt : [],
                 ];
             }
         }

@@ -12,7 +12,9 @@ enum TransactionState: string
     case Pending = 'pending';
     case Skipped = 'skipped';
     case Failed = 'failed';
-    case AtProvider = 'at_provider';
+    // The user is at DEZI. Earlier versions stored `at_provider`; neither version reads the other's
+    // value, so every node switches together (README "Upgrading: the at_dezi transaction state").
+    case AtDezi = 'at_dezi';
     case Validating = 'validating';
     case Succeeded = 'succeeded';
     case Consumed = 'consumed';
@@ -31,8 +33,8 @@ enum TransactionState: string
     public function canMoveTo(self $next): bool
     {
         return in_array($next, match ($this) {
-            self::Pending => [self::AtProvider],
-            self::AtProvider => [self::Validating],
+            self::Pending => [self::AtDezi],
+            self::AtDezi => [self::Validating],
             self::Validating => [self::Succeeded, self::Failed],
             self::Succeeded, self::Skipped => [self::Consumed, self::Failed],
             self::Failed, self::Consumed => [],

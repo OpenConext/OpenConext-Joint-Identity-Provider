@@ -30,8 +30,8 @@ final class MariaDbTransactionStoreTest extends TestCase
     private const string START = '2026-10-20 10:00:00.250000';
     // The state diagram of design §13.
     private const array ALLOWED_TRANSITIONS = [
-        'pending' => ['at_provider'],
-        'at_provider' => ['validating'],
+        'pending' => ['at_dezi'],
+        'at_dezi' => ['validating'],
         'validating' => ['succeeded', 'failed'],
         'succeeded' => ['consumed', 'failed'],
         'skipped' => ['consumed', 'failed'],
@@ -59,8 +59,8 @@ final class MariaDbTransactionStoreTest extends TestCase
         );
         $now = self::at('+10 seconds');
         $store = $this->store();
-        self::assertTrue($store->compareAndSet('t1', TransactionState::Pending, self::with($transaction, TransactionState::AtProvider, attempt: $attempt), $now));
-        self::assertTrue($store->compareAndSet('t1', TransactionState::AtProvider, self::with($transaction, TransactionState::Validating, attempt: $attempt), $now));
+        self::assertTrue($store->compareAndSet('t1', TransactionState::Pending, self::with($transaction, TransactionState::AtDezi, attempt: $attempt), $now));
+        self::assertTrue($store->compareAndSet('t1', TransactionState::AtDezi, self::with($transaction, TransactionState::Validating, attempt: $attempt), $now));
         self::assertTrue($store->compareAndSet('t1', TransactionState::Validating, self::with(
             $transaction,
             TransactionState::Succeeded,
@@ -105,7 +105,7 @@ final class MariaDbTransactionStoreTest extends TestCase
         $transaction = self::transaction('t1', TransactionState::Pending);
         self::assertTrue($store->add($transaction));
         $attempt = new ProviderAttempt('state-1', 'nonce-1', 'verifier-1', 'cookie-1', self::at('+1 second'));
-        self::assertTrue($store->compareAndSet('t1', TransactionState::Pending, self::with($transaction, TransactionState::AtProvider, attempt: $attempt), self::at('+1 second')));
+        self::assertTrue($store->compareAndSet('t1', TransactionState::Pending, self::with($transaction, TransactionState::AtDezi, attempt: $attempt), self::at('+1 second')));
 
         foreach (['T1', 't1 ', "t1\n"] as $id) {
             self::assertNull($store->find($id), $id);
@@ -175,7 +175,7 @@ final class MariaDbTransactionStoreTest extends TestCase
         $store = $this->store();
         $transaction = self::transaction('t1', TransactionState::Pending);
         $store->add($transaction);
-        $replacement = self::with($transaction, TransactionState::AtProvider);
+        $replacement = self::with($transaction, TransactionState::AtDezi);
 
         self::assertFalse($store->compareAndSet('t1', TransactionState::Pending, $replacement, self::at('+600 seconds')));
         self::assertTrue($store->compareAndSet('t1', TransactionState::Pending, $replacement, self::at('+600 seconds')->modify('-1 usec')));
@@ -287,7 +287,7 @@ final class MariaDbTransactionStoreTest extends TestCase
         }
 
         self::assertSame(TransactionState::Pending, $store->find('t1')?->state);
-        self::assertTrue($store->compareAndSet('t1', TransactionState::Pending, self::with($transaction, TransactionState::AtProvider), self::at('+1 second')));
+        self::assertTrue($store->compareAndSet('t1', TransactionState::Pending, self::with($transaction, TransactionState::AtDezi), self::at('+1 second')));
     }
 
     /** @return iterable<string, array{string}> */
@@ -343,10 +343,10 @@ final class MariaDbTransactionStoreTest extends TestCase
         $store->add($pending);
         $now = self::at('+1 second');
         $attempt = new ProviderAttempt('state', 'nonce', 'verifier', 'cookie', $now);
-        $atProvider = $pending->atProvider($attempt);
-        self::assertTrue($store->compareAndSet('t1', TransactionState::Pending, $atProvider, $now));
-        $validating = $atProvider->validating();
-        self::assertTrue($store->compareAndSet('t1', TransactionState::AtProvider, $validating, $now));
+        $atDezi = $pending->atDezi($attempt);
+        self::assertTrue($store->compareAndSet('t1', TransactionState::Pending, $atDezi, $now));
+        $validating = $atDezi->validating();
+        self::assertTrue($store->compareAndSet('t1', TransactionState::AtDezi, $validating, $now));
         $result = new StoredProfileResult(['dezi_nummer' => ['123456789']], self::at('+300 seconds'), []);
         $transaction = $validating;
         if ($assigned) {
