@@ -97,6 +97,27 @@ final class ConfigurationFixture
     }
 
     /**
+     * Selects the optional private_key_jwt method for the ggd test client, using this fixture's keys.
+     *
+     * @param array<mixed> $configuration
+     * @return array<mixed>
+     */
+    public function withPrivateKeyJwt(array $configuration): array
+    {
+        $configuration = self::with(
+            $configuration,
+            ['provider', 'clients', 'ggd', 'authentication'],
+            'private_key_jwt',
+        );
+
+        return self::with($configuration, ['provider', 'clients', 'ggd', 'signing_key'], [
+            'certificate' => $this->directory . '/signing.crt',
+            'private_key' => $this->directory . '/signing.pem',
+            'assertion_lifetime_seconds' => 60,
+        ]);
+    }
+
+    /**
      * @param array<array-key, mixed> $configuration
      */
     public function writeConfiguration(array $configuration, string $name = 'jip.yaml'): string

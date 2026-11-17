@@ -494,16 +494,7 @@ final class BrowserFlowTest extends WebTestCase
     public function test_an_unlisted_authentication_method_stops_before_the_provider(): void
     {
         // The explicit optional private_key_jwt client; the provider lists only none, and JIP does not fall back.
-        $data = Fixture::with(
-            $this->fixture->mockConfiguration(),
-            ['provider', 'clients', 'ggd', 'authentication'],
-            'private_key_jwt',
-        );
-        $data = Fixture::with($data, ['provider', 'clients', 'ggd', 'signing_key'], [
-            'certificate' => $this->fixture->directory . '/signing.crt',
-            'private_key' => $this->fixture->directory . '/signing.pem',
-            'assertion_lifetime_seconds' => 60,
-        ]);
+        $data = $this->fixture->withPrivateKeyJwt($this->fixture->mockConfiguration());
         $this->fixture->writeConfiguration($data);
         $id = $this->start(['900000001']);
         $this->provider->discovery['token_endpoint_auth_methods_supported'] = ['none'];

@@ -61,10 +61,11 @@ final class OidcFixture
 
     /**
      * @param list<array{list<string|int>, mixed}> $changes
+     * @param array<mixed>|null $base
      */
-    public function configuration(array $changes = []): JipConfiguration
+    public function configuration(array $changes = [], ?array $base = null): JipConfiguration
     {
-        $data = $this->configFixture->mockConfiguration();
+        $data = $base ?? $this->configFixture->mockConfiguration();
         foreach ($changes as [$path, $value]) {
             /** @var array<string, mixed> $data */
             $data = Fixture::with($data, $path, $value);
